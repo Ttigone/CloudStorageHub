@@ -13,6 +13,7 @@ cmake_policy(SET CMP0048 NEW)
 # Add include path for cmake modules
 # ------ PROJECT EXTRA CMAKE ------
 
+# 添加第三方库的路径
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/config/")
 
@@ -21,12 +22,12 @@ include(FetchContent)
 
 # ------ PROJECT INFO ------
 # Options
-set(PROJECT_NAME "PT" CACHE STRING "Project Name.") #You can change "ProjectTemplate" with your project name.
+set(PROJECT_NAME "CloudStorageHub" CACHE STRING "Project Name.") #You can change "ProjectTemplate" with your project name.
 set(PROJECT_TARGET ${PROJECT_NAME} CACHE STRING "Project Target Name.")
 
 set(PROJECT_VERSION_MAJOR 1)
 set(PROJECT_VERSION_MINOR 0)
-set(PROJECT_VERSION_PATCH 6)
+set(PROJECT_VERSION_PATCH 0)
 
 # ---- Project settings ----
 set_property(GLOBAL APPEND PROPERTY USE_FOLDERS ON)
@@ -39,7 +40,7 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 
-set(PROJECT_CREATOR "Kambiz Asadzadeh" CACHE STRING "Creator of your project.") #Your project creator.
+set(PROJECT_CREATOR "C3H3_Ttigone" CACHE STRING "Creator of your project.") #Your project creator.
 
 set(PROJECT_LICENSE_TYPE "MIT" CACHE STRING "Project License Type.") #Your project license type.
 
@@ -258,71 +259,72 @@ message(STATUS "${Bold}LIBRARY_OUTPUT_PATH${ColourReset}		: ${LIBRARY_OUTPUT_PAT
 message(STATUS "${Bold}CMAKE_CURRENT_SOURCE_DIR${ColourReset}	: ${CMAKE_CURRENT_SOURCE_DIR}")
 message(STATUS "${BoldBlue}------ ${PROJECT_TARGET} End Configuration ------${ColourReset}")
 
+
 if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STREQUAL "qtwidget" OR PROJECT_MAIN_TYPE STREQUAL "qtquick")
     if(USE_QT5_FEATURES)
         if(${PROJECT_MAIN_TYPE} STREQUAL "qt")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Core5Compat)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Core5Compat)
             list(APPEND QT_MODULES Core Core5Compat)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 Qt${QT_VERSION_MAJOR}::Core5Compat
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Core5Compat)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Core5Compat)
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtwidget")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets Core5Compat)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Core5Compat)
             list(APPEND QT_MODULES Core Widgets Core5Compat)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 Qt${QT_VERSION_MAJOR}::Widgets
                 Qt${QT_VERSION_MAJOR}::Core5Compat
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets Core5Compat)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Core5Compat)
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Quick Core5Compat)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Quick Core5Compat)
             list(APPEND QT_MODULES Core Quick Core5Compat)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 Qt${QT_VERSION_MAJOR}::Quick
                 Qt${QT_VERSION_MAJOR}::Core5Compat
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Quick Core5Compat)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Quick Core5Compat)
         else()
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Core5Compat)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Core5Compat)
             list(APPEND QT_MODULES Core Core5Compat)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 Qt${QT_VERSION_MAJOR}::Core5Compat
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Core5Compat)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Core5Compat)
         endif()
     else()
         if(${PROJECT_MAIN_TYPE} STREQUAL "qt")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core)
             list(APPEND QT_MODULES Core)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core)
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtwidget")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
             list(APPEND QT_MODULES Core Widgets)
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Core
                 Qt${QT_VERSION_MAJOR}::Widgets
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick)
             list(APPEND QT_MODULES Core${SPACE_ARG})
             list(APPEND QT_MODULES Quick${SPACE_ARG})
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Quick
                 )
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick)
         endif()
     endif()
 
-    qt_standard_project_setup(REQUIRES 6.5)
+#    qt_standard_project_setup(REQUIRES 6.5)
 
     if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         if(PROJECT_USAGE_TYPE STREQUAL "library")
@@ -364,6 +366,10 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
             endif()
         endif()
     endif()
+
+    list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/ui/third_party/qwindowkit/)
+    find_package(QWindowKit COMPONENTS Core Quick REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PUBLIC QWindowKit::Quick)
 
     #Extra Targets & Modules
     target_link_libraries(${PROJECT_NAME} PRIVATE

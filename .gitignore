@@ -36,3 +36,7 @@
 
 # Final Output
 build/ProjectTemplate
+
+build*/
+CMakeLists.txt.user
+.vscode/
