@@ -13,9 +13,27 @@ public:
   DbSqlite();
   ~DbSqlite();
 
+  ///
+  /// @brief connect
+  /// @param dbPath
+  /// 链接数据库
   void connect(const QString &dbPath);
+
+  ///
+  /// @brief exec
+  /// @param sql
+  /// @return
+  /// 执行 sql 语句
   QSqlQuery exec(const QString &sql);
+
+  ///
+  /// @brief exec
+  /// @param sql
+  /// @param variantList
+  /// @return
+  /// 查询多条数据
   QSqlQuery exec(const QString &sql, const QVariantList &variantList);
+
   bool exists(const QString &sql);
   QList<RECORD> select(const QString &sql);
 

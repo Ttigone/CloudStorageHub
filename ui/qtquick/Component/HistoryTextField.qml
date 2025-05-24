@@ -24,23 +24,44 @@ TextField {
     signal historyItemSelected(string value)
 
     function togglePopup(forceState) {
+        // if (forceState === true) {
+        //     // 不可视并且当前有数据源
+        //     if (!historyPopup.visible && historyModel.length > 0) {
+        //         historyPopup.open()
+        //     } else if (forceState === false) {
+        //         if (historyPopup.visible) {
+        //             historyPopup.close()
+        //         }
+        //     } else {
+        //         // 切换状态
+        //         if (historyModel.length > 0) {
+        //             if (historyPopup.visible) {
+        //                 historyPopup.close()
+        //             } else {
+        //                 historyPopup.open()
+        //             }
+        //         }
+        //     }
+        // }
+        // 没有历史记录时不显示
+        if (historyModel.length === 0) {
+            return
+        }
+
         if (forceState === true) {
-            // 不可视并且当前有数据源
-            if (!historyPopup.visible && historyModel.length > 0) {
+            if (!historyPopup.visible) {
                 historyPopup.open()
-            } else if (forceState === false) {
-                if (historyPopup.visible) {
-                    historyPopup.close()
-                }
+            }
+        } else if (forceState === false) {
+            if (historyPopup.visible) {
+                historyPopup.close()
+            }
+        } else {
+            // 切换状态
+            if (historyPopup.visible) {
+                historyPopup.close()
             } else {
-                // 切换状态
-                if (historyModel.length > 0) {
-                    if (historyPopup.visible) {
-                        historyPopup.close()
-                    } else {
-                        historyPopup.open()
-                    }
-                }
+                historyPopup.open()
             }
         }
     }
@@ -54,46 +75,11 @@ TextField {
     }
 
     Keys.onDownPressed: {
-        // 会测键按下
         if (!activeFocus) {
             // 仅在失去焦点时关闭popup
             togglePopup(false)
         }
-        // if (!historyPopup.visible && historyModel.length > 0) {
-        //     historyPopup.open()
-        // } else {
-        //     event.accepted = false
-        // }
     }
-
-    // // 焦点变化处理
-    // onActiveFocusChanged: {
-    //     // if (activeFocus && !text && historyModel.length > 0) {
-    //     //     historyPopup.open()
-    //     // }
-    //     if (activeFocus) {
-    //         // 获得焦点时，如果有历史记录则显示 popup
-    //         if (historyModel.length > 0 && !text) {
-    //             historyPopup.open()
-    //         }
-    //     } else {
-    //         // 失去焦点时，关闭 popup
-    //         if (historyPopup.visible) {
-    //             historyPopup.close()
-    //         }
-    //     }
-    // }
-    // // 添加点击处理
-    // TapHandler {
-    //     onTapped: {
-    //         console.log("TapHandler clicked")
-    //         // 当用户点击输入框且有历史记录时显示 popup
-    //         if (control.historyModel.length > 0 && !historyPopup.visible) {
-    //             console.log("open popup")
-    //             historyPopup.open()
-    //         }
-    //     }
-    // }
 
     // 添加鼠标区域来处理右键点击
     MouseArea {
@@ -107,17 +93,9 @@ TextField {
             console.log("button on lcicked")
             // 为什么判断时右键
             if (mouse.button === Qt.RightButton) {
-                // if (control.historyModel.length > 0) {
-                //     console.log("open popup")
-                //     historyPopup.open()
-                // }
                 togglePopup(true)
                 mouse.accepted = true
             } else {
-                // console.log("不是右键按下, 但是 popup 会关闭")
-                // mouse.accepted = false
-                // 左键点击 - 传递给TextField的同时可以打开popup
-                // 首先传递事件以处理文本框点击
                 mouse.accepted = false
 
                 // 然后如果满足条件就打开popup
@@ -137,8 +115,6 @@ TextField {
             mouse.accepted = mouse.button === Qt.RightButton
         }
         onReleased: function (mouse) {
-            // console.log("release")
-            // mouse.accepted = false
             mouse.accepted = mouse.button === Qt.RightButton
         }
         onDoubleClicked: function (mouse) {
@@ -393,6 +369,8 @@ TextField {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
 
+                            property string itemText: modelData
+
                             onPressed: {
                                 parent.scale = 0.9
                             }
@@ -403,6 +381,7 @@ TextField {
 
                             // 删除按钮的动作
                             onClicked: {
+                                deleteAnimation.itemToRemove = modelData // 设置要删除的项
                                 deleteAnimation.start()
                             }
                         }

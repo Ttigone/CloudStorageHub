@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QRegularExpression> // 确保包含头文件
 
 FileHelper::FileHelper() {}
 
@@ -25,7 +26,8 @@ QVariant FileHelper::readAllJson(const QString &filePath) {
 
 QString FileHelper::joinPath(const QString &path1, const QString &path2) {
   QString path = path1 + "/" + path2;
-  QStringList pathList = path.split(QRegExp("[/\\\\]"), Qt::SkipEmptyParts);
+  QStringList pathList =
+      path.split(QRegularExpression(R"([/\\])"), Qt::SkipEmptyParts);
   path = pathList.join("/");
   return QDir::cleanPath(path);
 }

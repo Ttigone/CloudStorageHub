@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>testing/buckets1.json</file>
         <file>testing/buckets2.json</file>
+        <file>sql/login_info.sql</file>
     </qresource>
 </RCC>

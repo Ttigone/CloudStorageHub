@@ -40,3 +40,4 @@ build/ProjectTemplate
 build*/
 CMakeLists.txt.user
 .vscode/
+文档.md

@@ -1,16 +1,16 @@
-﻿#include "Logininfo.h"
+﻿#include "storage/TtLoginInfo.h"
 #include "config/config.h"
 
-DaoLoginInfo::DaoLoginInfo() {}
+TtLoginInfo::TtLoginInfo() {}
 
-bool DaoLoginInfo::exists(const QString &secretId) {
+bool TtLoginInfo::exists(const QString &secretId) {
   QString sql = QString("select id from %1 where  "
                         "secret_id = '%2';")
                     .arg(CONF::TABLES::LOGIN_INFO, secretId);
   return m_db.exists(sql);
 }
 
-void DaoLoginInfo::insert(const LoginInfo &info) {
+void TtLoginInfo::insert(const LoginInfo &info) {
   QString sql =
       QString("insert into %1 (name, secret_id, secret_key, remark, timestamp) "
               "values (?, ?, ?, ?, ?)")
@@ -21,7 +21,7 @@ void DaoLoginInfo::insert(const LoginInfo &info) {
   m_db.exec(sql, varList);
 }
 
-void DaoLoginInfo::update(const LoginInfo &info) {
+void TtLoginInfo::update(const LoginInfo &info) {
   QString sql = QString("update %1 "
                         "set name=?, "
                         "secret_key==?, "
@@ -35,7 +35,7 @@ void DaoLoginInfo::update(const LoginInfo &info) {
   m_db.exec(sql, varList);
 }
 
-void DaoLoginInfo::remove(const QString &secretId) {
+void TtLoginInfo::remove(const QString &secretId) {
   QString sql = QString("delete from %1 where  "
                         "secret_id = ?;")
                     .arg(CONF::TABLES::LOGIN_INFO);
@@ -44,7 +44,7 @@ void DaoLoginInfo::remove(const QString &secretId) {
   m_db.exec(sql, varList);
 }
 
-QList<LoginInfo> DaoLoginInfo::select() {
+QList<LoginInfo> TtLoginInfo::select() {
   QString sql = QString("select name, secret_id, secret_key, remark from %1 "
                         "order by timestamp desc;")
                     .arg(CONF::TABLES::LOGIN_INFO);
@@ -63,9 +63,12 @@ QList<LoginInfo> DaoLoginInfo::select() {
   return retList;
 }
 
-void DaoLoginInfo::connect() { m_db.connect(CONF::SQLITE::NAME); }
+void TtLoginInfo::connect() {
+  // qDebug() << CONF::SQLITE::NAME;
+  m_db.connect(CONF::SQLITE::NAME);
+}
 
-void DaoLoginInfo::createTable() {
+void TtLoginInfo::createTable() {
   QString sql = FileHelper::readAllTxt(CONF::SQL::LOGIN_INFO_TABLE);
   m_db.exec(sql);
 }

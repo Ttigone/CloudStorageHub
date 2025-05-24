@@ -3,10 +3,13 @@
         <file>main.qml</file>
         <file>LoginDialog.qml</file>
         <file>MainPage.qml</file>
+        <file>PreferencesDialog.qml</file>
         <file>Component/QWKButton.qml</file>
         <file>Component/FramelessWindow.qml</file>
         <file>Component/TtTextField.qml</file>
         <file>Component/HistoryTextField.qml</file>
+        <file>Component/TtMenu.qml</file>
+        <file>Component/TtSplitView.qml</file>
     </qresource>
     <qresource prefix="/">
         <file>resources/window-bar/close.svg</file>

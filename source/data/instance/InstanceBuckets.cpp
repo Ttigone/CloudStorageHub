@@ -102,3 +102,23 @@ QString InstanceBuckets::getToolTip(int row, int column) const
 
     return m_model->data(m_model->index(row, column), Qt::ToolTipRole).toString();
 }
+
+bool InstanceBuckets::updateBucketName(int row, const QString& newName)
+{
+    if (!m_model || row < 0 || row >= m_model->rowCount()) {
+        return false;
+    }
+
+    // 更新模型中的名称
+    QModelIndex index = m_model->index(row, 0);
+    // 这里更新了数据, 但是没有写到本地
+    bool success = m_model->setData(index, newName);
+
+    // 如果成功，同时更新工具提示
+    if (success) {
+        m_model->setData(index, QString("存储桶名称：%1").arg(newName), Qt::ToolTipRole);
+        emit modelChanged();
+    }
+
+    return success;
+}

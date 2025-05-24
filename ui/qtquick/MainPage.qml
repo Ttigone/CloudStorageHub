@@ -5,6 +5,8 @@ import QtQuick.Controls.Material
 import QtQml.Models
 import Qt.labs.qmlmodels
 
+import "./Component"
+
 Item {
     id: rootItem
     anchors.fill: parent
@@ -129,6 +131,7 @@ Item {
     signal downloadRequested(var selectedItems)
     signal searchRequested(string query)
     signal folderSelected(string folderId)
+    signal logoutRequested
 
     Connections {
         target: instanceBuckets
@@ -147,6 +150,7 @@ Item {
         }
     }
 
+    // BUG 添加退出登录的按钮
     // 整体布局
     ColumnLayout {
         anchors.fill: parent
@@ -172,7 +176,6 @@ Item {
                     id: searchField
                     Layout.preferredWidth: 300
                     Layout.preferredHeight: 36
-                    // placeholderText: "搜索文件..."
                     // 添加以下属性以禁用浮动标签
                     Material.accent: "#2980B9" // 设置强调色
                     Material.foreground: "#333333" // 设置前景色
@@ -306,12 +309,9 @@ Item {
                             downloadRequested(tableView.selectedItems)
                         }
                     }
-
-                    // 更多操作按钮
                     Button {
                         id: moreButton
                         text: "操作"
-
                         contentItem: RowLayout {
                             spacing: 5
                             Text {
@@ -319,7 +319,6 @@ Item {
                                 font.pixelSize: 14
                                 color: "#FFFFFF"
                             }
-
                             Text {
                                 text: "▼"
                                 font.pixelSize: 10
@@ -336,33 +335,26 @@ Item {
 
                         onClicked: operationsMenu.popup()
 
+                        // Menu {
                         Menu {
                             id: operationsMenu
-
                             MenuItem {
                                 text: "新建文件夹"
                                 onTriggered: console.log("新建文件夹")
                             }
-
                             MenuItem {
                                 text: "重命名"
-                                // enabled: tableView.selectionModel.hasSelection
-                                //  && tableView.selectionModel.selectedCount === 1
-                                // 修复不存在的 selectionModel 引用
                                 enabled: tableView.selectedItems
                                          && tableView.selectedItems.length === 1
                                 onTriggered: console.log("重命名")
                             }
-
                             MenuItem {
                                 text: "删除"
                                 enabled: tableView.selectedItems
                                          && tableView.selectedItems.length > 0
                                 onTriggered: console.log("删除")
                             }
-
                             MenuSeparator {}
-
                             MenuItem {
                                 text: "刷新"
                                 onTriggered: {
@@ -378,6 +370,115 @@ Item {
                             }
                         }
                     }
+                    Button {
+                        id: settingsButton
+                        width: 40
+                        height: 40
+                        text: "设置"
+
+                        // 移除背景以使用自定义视觉效果
+                        background: Item {
+                            anchors.fill: parent // 确保背景填满按钮
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                // 使用最小值确保是圆形
+                                property real size: Math.min(parent.width,
+                                                             parent.height) - 8
+                                width: size
+                                height: size
+                                radius: width / 2
+                                color: "#3498DB"
+                                opacity: settingsButton.hovered ? 0.2 : 0
+
+                                // 悬停动画
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 150
+                                    }
+                                }
+                            }
+                        }
+                        // 图标作为主要内容
+                        contentItem: Item {
+                            anchors.fill: parent
+                            // 设置图标 - 使用 FontAwesome 或类似图标字体
+                            Text {
+                                leftPadding: 1
+                                id: settingsIcon
+                                anchors.centerIn: parent
+                                text: "⚙️" // 使用 Unicode 设置图标
+                                font.pixelSize: 20
+                                color: "#FFFFFF"
+
+                                // 点击时的动画效果
+                                RotationAnimation {
+                                    id: rotationAnimation
+                                    target: settingsIcon
+                                    from: 0
+                                    to: 90
+                                    duration: 300
+                                    running: false
+                                }
+                            }
+                        }
+                        // 点击效果
+                        onPressed: {
+                            rotationAnimation.start()
+                        }
+                        onClicked: {
+                            settingsMenu.popup()
+                        }
+                        TtMenu {
+                            id: settingsMenu
+                            animationType: TtMenu.AnimationType.Elegant
+                            MenuItem {
+                                text: qsTr("账号设置")
+                                // icon.source: "qrc:/resources/icon/account.png" // 添加图标
+                                onTriggered: {
+                                    console.log("账号设置")
+                                    // 实现账号设置 功能
+                                }
+                            }
+                            MenuItem {
+                                text: qsTr("偏好设置")
+                                // icon.source: "qrc:/resources/icon/preferences.png" // 添加图标
+                                onTriggered: {
+                                    console.log("偏好设置")
+                                    // 实现偏好设置功能
+                                    var component = Qt.createComponent(
+                                                "PreferencesDialog.qml")
+                                    if (component.status === Component.Ready) {
+                                        var dialog = component.createObject(
+                                                    rootItem)
+                                        dialog.settingsApplied.connect(
+                                                    function () {
+                                                        // 这里处理应用设置后的逻辑
+                                                        console.log("设置已应用")
+                                                    })
+                                        dialog.visible = true
+                                    } else {
+                                        console.error("无法加载偏好设置对话框:",
+                                                      component.errorString())
+                                    }
+                                }
+                            }
+                            MenuSeparator {}
+                            MenuItem {
+                                text: qsTr("退出登录")
+                                // icon.source: "qrc:/resources/icon/logout.png" // 添加图标
+                                onTriggered: {
+                                    console.log("退出登录")
+                                    rootItem.logoutRequested()
+                                }
+                            }
+                        }
+
+                        // 添加工具提示
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("设置")
+                        ToolTip.delay: 500
+                    }
                 }
             }
         }
@@ -388,35 +489,13 @@ Item {
             Layout.fillHeight: true
 
             // 分割主内容区
-            SplitView {
+            // SplitView {
+            TtSplitView {
                 anchors.fill: parent
-                orientation: Qt.Horizontal
-                // 添加自定义 handle 代理
-                handle: Rectangle {
-                    implicitWidth: 6
-                    implicitHeight: 6
-                    color: SplitHandle.pressed ? "#777777" : SplitHandle.hovered ? "#BBBBBB" : "#DDDDDD"
-
-                    // 添加一条竖线使分隔更明显
-                    Rectangle {
-                        width: 1
-                        height: parent.height
-                        anchors.centerIn: parent
-                        color: SplitHandle.pressed ? "#555555" : "#999999"
-                    }
-
-                    // 鼠标经过时显示不同光标
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.SplitHCursor
-                        enabled: false // 只改变光标，不阻止事件
-                    }
-                }
-
                 // 左侧导航面板
                 Rectangle {
                     id: navPanel
-                    SplitView.preferredWidth: 220
+                    SplitView.preferredWidth: 200
                     SplitView.minimumWidth: 180
                     SplitView.maximumWidth: 300
                     color: "#2D3436"
@@ -554,11 +633,10 @@ Item {
                                         mouse.accepted = false
                                     }
                                     // 添加文件夹上下文菜单
-                                    Menu {
+                                    TtMenu {
                                         id: folderContextMenu
                                         property var folderData: null
                                         property int folderIndex: -1
-
                                         MenuItem {
                                             text: qsTr("编辑")
                                             onTriggered: {
@@ -668,9 +746,9 @@ Item {
                                                 rootItem.sortColumn = 3
                                                 rootItem.sortAscending = true
                                             }
-                                            tableView.sortByColumn(
-                                                        3,
-                                                        rootItem.sortAscending)
+                                            sortByColumn(3,
+                                                         rootItem.sortAscending)
+                                            // rootItem.sortByColumn(3, rootItem.sortAscending)
                                         }
                                     }
 
@@ -702,16 +780,6 @@ Item {
                                             Layout.fillWidth: true
                                         }
                                     }
-                                    // Label {
-                                    //     anchors {
-                                    //         left: parent.left
-                                    //         leftMargin: 8
-                                    //         verticalCenter: parent.verticalCenter
-                                    //     }
-                                    //     text: "创建时间"
-                                    //     font.bold: true
-                                    //     Layout.fillWidth: true
-                                    // }
                                 }
                             }
                         }
@@ -720,7 +788,64 @@ Item {
                             id: tableView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            property int editingRow: -1
+                            property int editingColumn: -1
                             clip: true
+                            // 添加排序函数
+                            function sortByColumn(column, ascending) {
+                                // 创建临时数组存储所有数据
+                                let rows = []
+                                for (var i = 0; i < tableModel.rowCount; i++) {
+                                    rows.push(tableModel.getRow(i))
+                                }
+
+                                // 根据选定的列排序
+                                rows.sort(function (a, b) {
+                                    let valueA, valueB
+
+                                    // 根据列选择字段
+                                    if (column === 1) {
+                                        valueA = a.name ? a.name.toLowerCase(
+                                                              ) : ""
+                                        valueB = b.name ? b.name.toLowerCase(
+                                                              ) : ""
+                                    } else if (column === 2) {
+                                        valueA = a.zone ? a.zone.toLowerCase(
+                                                              ) : ""
+                                        valueB = b.zone ? b.zone.toLowerCase(
+                                                              ) : ""
+                                    } else if (column === 3) {
+                                        // 处理日期排序 - 使用日期格式解析
+                                        valueA = rootItem.parseDateString(
+                                                    a.date)
+                                        valueB = rootItem.parseDateString(
+                                                    b.date)
+                                    } else {
+                                        return 0 // 不支持的列
+                                    }
+
+                                    // 升序/降序比较
+                                    if (ascending) {
+                                        if (valueA < valueB)
+                                            return -1
+                                        if (valueA > valueB)
+                                            return 1
+                                        return 0
+                                    } else {
+                                        if (valueA > valueB)
+                                            return -1
+                                        if (valueA < valueB)
+                                            return 1
+                                        return 0
+                                    }
+                                })
+
+                                // 清除当前数据并按排序顺序重新添加
+                                tableModel.clear()
+                                for (var i = 0; i < rows.length; i++) {
+                                    tableModel.appendRow(rows[i])
+                                }
+                            }
                             // 宽度
                             columnWidthProvider: function (column) {
                                 return column < rootItem.columnWidths.length ? rootItem.columnWidths[column] : 100
@@ -754,6 +879,10 @@ Item {
                                 // 获取选中的文件夹ID
                                 const selectedFolderId = folderListView.currentItem
                                                        && folderListView.currentItem.modelData ? folderListView.currentItem.modelData.id : "all"
+                                if (rootItem.sortColumn !== -1) {
+                                    sortByColumn(rootItem.sortColumn,
+                                                 rootItem.sortAscending)
+                                }
 
                                 // 加载文件数据
                                 if (instanceBuckets
@@ -814,7 +943,9 @@ Item {
                                     column: 1
                                     delegate: Rectangle {
                                         id: nameCell
-                                        property bool isEditing: false
+                                        // property bool isEditing: false
+                                        property bool isEditing: tableView.editingRow === row
+                                                                 && tableView.editingColumn === 1
                                         color: {
                                             const isSelected = tableView.selectedItems.some(
                                                                  item => item.id
@@ -824,6 +955,7 @@ Item {
                                         }
                                         implicitHeight: 50
                                         Text {
+                                            id: cellText
                                             anchors {
                                                 left: parent.left
                                                 leftMargin: 8
@@ -834,6 +966,8 @@ Item {
                                             width: parent.width - 16
                                             font.bold: tableModel.getRow(
                                                            row).isFolder
+                                            // 添加此条件，在编辑模式下隐藏
+                                            visible: !nameCell.isEditing
                                         }
                                         // 编辑框
                                         TextField {
@@ -848,64 +982,131 @@ Item {
                                             text: display
                                             visible: nameCell.isEditing
                                             selectByMouse: true
-                                            onAccepted: {
-                                                // 保存编辑后的值
-                                                if (text !== display) {
-                                                    // 更新模型
-                                                    const rowData = tableModel.getRow(
-                                                                      row)
-                                                    rowData.name = text
-
-                                                    // 这里你可以添加代码将更改保存到后端
-                                                    console.log("重命名项目:",
-                                                                display, "为",
-                                                                text)
-                                                }
-                                                nameCell.isEditing = false
+                                            // 添加不透明背景
+                                            background: Rectangle {
+                                                color: nameCell.color // 使用与单元格相同的背景色
+                                                border.color: editField.focus ? "#3498db" : "#DDDDDD"
+                                                border.width: 1
+                                                radius: 2
                                             }
-
-                                            Keys.onEscapePressed: {
-                                                nameCell.isEditing = false
-                                            }
-
                                             Component.onCompleted: {
                                                 if (nameCell.isEditing) {
                                                     forceActiveFocus()
                                                     selectAll()
                                                 }
                                             }
-                                        }
-                                        // 工具提示
-                                        ToolTip {
-                                            id: cellTooltip
-                                            visible: mouseArea.containsMouse
-                                            delay: 250
-                                            timeout: 2500
-                                            // 使用绝对位置定位
-                                            x: nameCell.mapToItem(tableView, 0,
-                                                                  0).x
-                                            y: nameCell.mapToItem(
-                                                   tableView, 0,
-                                                   0).y - cellTooltip.height - 5
-                                            text: {
-                                                if (instanceBuckets
-                                                        && typeof instanceBuckets.getToolTip
-                                                        === "function") {
-                                                    for (var i = 0; i < instanceBuckets.bucketCount(
-                                                             ); i++) {
-                                                        if (instanceBuckets.getBucketData(
-                                                                    i,
-                                                                    0) === display) {
-                                                            const tipData = instanceBuckets.getToolTip(i, 0)
-                                                            if (tipData) {
-                                                                return tipData
-                                                            }
+                                            // onAccepted: {
+                                            //     // 保存编辑后的值
+                                            //     if (text !== display) {
+                                            //         // 更新模型
+                                            //         const rowData = tableModel.getRow(
+                                            //                           row)
+                                            //         rowData.name = text
+                                            //         // 将修改写回模型 - 这是关键步骤
+                                            //         // tableModel.setRow(row, rowData)
+                                            //         rootItem.requestModelUpdate(
+                                            //                     row, "name",
+                                            //                     text)
+                                            //         console.log("重命名项目:",
+                                            //                     display, "为",
+                                            //                     text)
+                                            //         // 强制视图刷新
+                                            //         tableView.forceLayout()
+                                            //         // 确实重命名输出了, 但是没有本质改变底层 model
+                                            //     }
+                                            //     // 重置编辑状态
+                                            //     tableView.editingRow = -1
+                                            //     tableView.editingColumn = -1
+                                            // }
+                                            // 修改编辑字段的 onAccepted 处理器
+                                            onAccepted: {
+                                                // 保存编辑后的值
+                                                if (text !== display) {
+                                                    // 调用 InstanceBuckets 中的方法更新模型
+                                                    if (instanceBuckets
+                                                            && typeof instanceBuckets.updateBucketName === "function") {
+                                                        if (instanceBuckets.updateBucketName(
+                                                                    row,
+                                                                    text)) {
+                                                            console.log("重命名项目:",
+                                                                        display,
+                                                                        "为",
+                                                                        text,
+                                                                        "并更新了模型")
+                                                        } else {
+                                                            console.error(
+                                                                        "重命名失败")
+                                                        }
+                                                    } else {
+                                                        console.error(
+                                                                    "updateBucketName 方法不可用")
+
+                                                        // 备用方案：尝试直接更新视图模型
+                                                        try {
+                                                            const rowData = tableModel.getRow(row)
+                                                            rowData.name = text
+                                                            tableView.forceLayout()
+                                                            console.log("已更新视图模型，但可能未更新底层数据")
+                                                        } catch (e) {
+                                                            console.error(
+                                                                        "更新视图模型失败:",
+                                                                        e)
                                                         }
                                                     }
                                                 }
-                                                return display
+
+                                                // 重置编辑状态
+                                                tableView.editingRow = -1
+                                                tableView.editingColumn = -1
+                                            }
+
+                                            Keys.onEscapePressed: {
+                                                // 取消编辑
+                                                tableView.editingRow = -1
+                                                tableView.editingColumn = -1
+                                            }
+
+                                            // 当出现时自动聚焦
+                                            onVisibleChanged: {
+                                                if (visible) {
+                                                    Qt.callLater(function () {
+                                                        forceActiveFocus()
+                                                        selectAll()
+                                                    })
+                                                }
                                             }
                                         }
+                                        // 工具提示
+                                        // ToolTip {
+                                        //     id: cellTooltip
+                                        //     visible: mouseArea.containsMouse
+                                        //     delay: 250
+                                        //     timeout: 2500
+                                        //     // 使用绝对位置定位
+                                        //     x: nameCell.mapToItem(tableView, 0,
+                                        //                           0).x
+                                        //     y: nameCell.mapToItem(
+                                        //            tableView, 0,
+                                        //            0).y - cellTooltip.height - 5
+                                        //     text: {
+                                        //         if (instanceBuckets
+                                        //                 && typeof instanceBuckets.getToolTip
+                                        //                 === "function") {
+                                        //             for (var i = 0; i < instanceBuckets.bucketCount(
+                                        //                      ); i++) {
+                                        //                 if (instanceBuckets.getBucketData(
+                                        //                             i,
+                                        //                             0) === display) {
+                                        //                     const tipData = instanceBuckets.getToolTip(i, 0)
+                                        //                     if (tipData) {
+                                        //                         return tipData
+                                        //                     }
+                                        //                 }
+                                        //             }
+                                        //         }
+                                        //         return display
+                                        //     }
+                                        // }
 
                                         // 处理点击事件
                                         MouseArea {
@@ -1037,13 +1238,14 @@ Item {
                             }
 
                             function isItemSelected(id) {
+                                // 只有成功选择
                                 console.log("isItemSelected called with id:",
                                             id)
                                 return selectedItems.some(
                                             item => item.id === id)
                             }
                             // 上下文菜单
-                            Menu {
+                            TtMenu {
                                 id: contextMenu
                                 property var rowData: null
                                 property int rowIndex: -1
@@ -1051,67 +1253,60 @@ Item {
                                 // MenuItem {
                                 //     text: qsTr("编辑")
                                 //     onTriggered: {
-                                //         const nameCell = tableView.itemAtCell(
-                                //                            tableView.rowAtIndex(
-                                //                                contextMenu.rowIndex),
-                                //                            1)
-                                //         if (nameCell
-                                //                 && nameCell.isEditing !== undefined) {
-                                //             nameCell.isEditing = true
-                                //             // 使用 Qt.callLater 确保编辑框获得焦点
-                                //             Qt.callLater(function () {
-                                //                 const textField = nameCell.children[1] // 获取TextField
-                                //                 if (textField) {
-                                //                     textField.forceActiveFocus()
-                                //                     textField.selectAll()
+                                //         try {
+                                //             // 直接使用行索引，而不是试图转换它
+                                //             const row = contextMenu.rowIndex
+                                //             const column = 1 // 名称列
+                                //             // 获取单元格项
+                                //             const nameDelegate = tableView.itemAtCell(
+                                //                                    column, row)
+                                //             if (nameDelegate) {
+                                //                 // 查找实际的 Rectangle （nameCell）
+                                //                 for (var i = 0; i
+                                //                      < nameDelegate.children.length; i++) {
+                                //                     const child = nameDelegate.children[i]
+                                //                     if (child.isEditing !== undefined) {
+                                //                         // 找到了 nameCell
+                                //                         child.isEditing = true
+                                //                         console.log("开始编辑:",
+                                //                                     child.display)
+
+                                //                         // 寻找编辑框并聚焦
+                                //                         Qt.callLater(function () {
+                                //                             for (var j = 0; j
+                                //                                  < child.children.length; j++) {
+                                //                                 const grandChild = child.children[j]
+                                //                                 if (grandChild.text !== undefined
+                                //                                         && typeof grandChild.forceActiveFocus === "function" && typeof grandChild.selectAll === "function") {
+                                //                                     // 找到了编辑框
+                                //                                     grandChild.forceActiveFocus()
+                                //                                     grandChild.selectAll()
+                                //                                     break
+                                //                                 }
+                                //                             }
+                                //                         })
+
+                                //                         break
+                                //                     }
                                 //                 }
-                                //             })
+                                //             }
+                                //         } catch (e) {
+                                //             console.error("编辑操作失败:", e)
                                 //         }
                                 //     }
                                 // }
                                 MenuItem {
                                     text: qsTr("编辑")
                                     onTriggered: {
-                                        try {
-                                            // 直接使用行索引，而不是试图转换它
-                                            const row = contextMenu.rowIndex
-                                            const column = 1 // 名称列
+                                        // 使用全局属性控制编辑状态，避免 DOM 访问
+                                        tableView.editingRow = contextMenu.rowIndex
+                                        tableView.editingColumn = 1 // 名称列
 
-                                            // 获取单元格项
-                                            const nameDelegate = tableView.itemAtCell(
-                                                                   column, row)
+                                        // 通知视图更新
+                                        tableView.forceLayout()
 
-                                            if (nameDelegate) {
-                                                // 查找实际的 Rectangle （nameCell）
-                                                for (var i = 0; i
-                                                     < nameDelegate.children.length; i++) {
-                                                    const child = nameDelegate.children[i]
-                                                    if (child.isEditing !== undefined) {
-                                                        // 找到了 nameCell
-                                                        child.isEditing = true
-
-                                                        // 寻找编辑框并聚焦
-                                                        Qt.callLater(function () {
-                                                            for (var j = 0; j
-                                                                 < child.children.length; j++) {
-                                                                const grandChild = child.children[j]
-                                                                if (grandChild.text !== undefined
-                                                                        && typeof grandChild.forceActiveFocus === "function" && typeof grandChild.selectAll === "function") {
-                                                                    // 找到了编辑框
-                                                                    grandChild.forceActiveFocus()
-                                                                    grandChild.selectAll()
-                                                                    break
-                                                                }
-                                                            }
-                                                        })
-
-                                                        break
-                                                    }
-                                                }
-                                            }
-                                        } catch (e) {
-                                            console.error("编辑操作失败:", e)
-                                        }
+                                        console.log("开始编辑行:",
+                                                    contextMenu.rowIndex)
                                     }
                                 }
                                 MenuItem {

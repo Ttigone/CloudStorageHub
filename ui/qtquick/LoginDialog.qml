@@ -14,17 +14,26 @@ Window {
     id: dialog
     property bool showWhenReady: true
     color: darkStyle.windowBackgroundColor
-    width: 360
-    height: 500
-    title: "登录"
+    width: 420
+    height: 580
+    title: "登录窗口"
     visible: false
     flags: Qt.Dialog
     modality: Qt.ApplicationModal
     signal loginSuccess
 
+    // 添加属性用于存储 TDB 提供的登录名列表
+    property var loginNames: []
+
     Component.onCompleted: {
         windowAgent.setup(dialog)
         windowAgent.setWindowAttribute("dark-mode", true)
+        if (dialog.showWhenReady) {
+            dialog.visible = true
+        }
+        // 从数据库获取登录名列表
+        loginNames = TtDB.loginNameList
+        console.log("从数据库加载了 " + loginNames.length + " 个登录名")
         if (dialog.showWhenReady) {
             dialog.visible = true
         }
@@ -66,7 +75,6 @@ Window {
                 width: 18
                 height: 18
                 mipmap: true
-                // source: "qrc:/resources/app/example.png"
                 source: "qrc:/resources/app/storage.png"
                 fillMode: Image.PreserveAspectFit
                 Component.onCompleted: windowAgent.setSystemButton(
@@ -141,7 +149,7 @@ Window {
                     fill: parent
                     margins: 20
                 }
-                spacing: 12
+                spacing: 8
 
                 // 标题
                 Label {
@@ -149,40 +157,56 @@ Window {
                     font.pixelSize: 22
                     font.bold: true
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.topMargin: 10
-                    Layout.bottomMargin: 16
+                    Layout.topMargin: 5
+                    Layout.bottomMargin: 10
                     color: "#ECECEC"
                 }
-
-                // SecretId
+                // 登录名
                 Label {
-                    text: qsTr("SecretId")
+                    text: qsTr("登录名")
                     font.pixelSize: 14
                     color: "#CCCCCC"
+                    Layout.topMargin: 4
                 }
+                // TextField {
                 HistoryTextField {
-                    id: secretId
+                    // BUG 登录名点击之后(从历史记录中点击 popup), 需要从 db 里面获取对应的记录, 然后显示到 ui 界面上
+                    id: loginName
                     Layout.fillWidth: true
-                    placeholderText: qsTr("请输入 API 密钥")
-                    historyModel: configManager.secretIdHistory
-
-                    // 连接删除历史记录信号
-                    onRequestRemoveHistory: function (value) {
-                        configManager.removeFromHistory(value)
+                    placeholderText: qsTr("请输入用户登录名")
+                    height: 40
+                    selectByMouse: true
+                    echoMode: TextInput.Normal
+                    color: "#FFFFFF"
+                    placeholderTextColor: "#8A8A8A" // 更亮的灰色，提高对比度
+                    background: Rectangle {
+                        radius: 4
+                        color: "#3E3E42"
+                        border.color: loginName.focus ? "#3498db" : "#555555"
+                        border.width: 1
                     }
-                    // 添加当历史项被选择时的处理
+                    // 列表作为历史记录模型
+                    historyModel: dialog.loginNames
+                    // 连接删除历史记录信号
+                    onRequestRemoveHistory: function (value) {// 删除 db 历史记录
+                        // configManager.removeFromHistory(value)
+                    }
+                    // 修改 historyItemSelected 处理逻辑
                     onHistoryItemSelected: function (value) {
-                        if (configManager) {
-                            // 选择项时又会发出一次信号
-                            let matchedKey = configManager.findMatchingKey(
-                                    value)
-                            if (matchedKey) {
-                                // console.log("找到匹配的密钥:", matchedKey)
-                                secretKey.text = matchedKey
-                            } else {
+                        try {
+                            // 从 TDB 获取完整的登录信息
+                            // var loginInfo = TtDB.loginInfoByName(value)
+                            var loginInfo = TtDB.loginInfoAsMap(value)
 
-                                // console.log("没有密钥:", matchedKey)
-                            }
+                            // 填充各个字段
+                            loginName.text = loginInfo.name
+                            secretId.text = loginInfo.secret_id
+                            secretKey.text = loginInfo.secret_key
+                            backup.text = loginInfo.remark
+
+                            console.log("已自动填充用户 " + value + " 的登录信息")
+                        } catch (e) {
+                            console.error("获取登录信息失败: " + e)
                         }
                     }
                     // 添加文本变化处理
@@ -198,13 +222,35 @@ Window {
                         }
                     }
                 }
-
+                // SecretId
+                Label {
+                    text: qsTr("SecretId")
+                    font.pixelSize: 14
+                    color: "#CCCCCC"
+                }
+                // HistoryTextField {
+                TextField {
+                    id: secretId
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("请输入 API ID")
+                    height: 40
+                    selectByMouse: true
+                    echoMode: TextInput.Password
+                    color: "#FFFFFF"
+                    placeholderTextColor: "#8A8A8A" // 更亮的灰色，提高对比度
+                    background: Rectangle {
+                        radius: 4
+                        color: "#3E3E42"
+                        border.color: secretId.focus ? "#3498db" : "#555555"
+                        border.width: 1
+                    }
+                }
                 // SecretKey
                 Label {
                     text: qsTr("SecretKey")
                     font.pixelSize: 14
                     color: "#CCCCCC"
-                    Layout.topMargin: 8
+                    Layout.topMargin: 4
                 }
                 TextField {
                     id: secretKey
@@ -222,14 +268,14 @@ Window {
                         border.width: 1
                     }
                 }
-
                 // 备注
                 Label {
                     text: qsTr("备注")
                     font.pixelSize: 14
                     color: "#CCCCCC"
-                    Layout.topMargin: 8
+                    Layout.topMargin: 4
                 }
+                // 备足不需要对应的 popup
                 TextField {
                     id: backup
                     placeholderText: qsTr("非必填，添加备注名，用于账号管理")
@@ -238,101 +284,6 @@ Window {
                     selectByMouse: true
                     color: "#FFFFFF"
                     placeholderTextColor: "#8A8A8A" // 更亮的灰色，提高对比度
-                    // 添加历史输入功能
-                    property bool showingHistory: false
-
-                    // 监听按键，弹出历史记录
-                    Keys.onDownPressed: {
-                        if (!remarkPopup.visible
-                                && configManager.remarkHistory.length > 0) {
-                            remarkPopup.open()
-                        } else {
-                            event.accepted = false
-                        }
-                    }
-
-                    onActiveFocusChanged: {
-                        if (activeFocus && !text
-                                && configManager.remarkHistory.length > 0) {
-                            remarkPopup.open()
-                        }
-                    }
-
-                    // 在用户开始输入时检查历史记录
-                    onTextChanged: {
-                        if (text && !showingHistory
-                                && configManager.remarkHistory.length > 0) {
-                            // 如果有匹配项，显示下拉菜单
-                            let foundMatch = false
-                            for (var i = 0; i < configManager.remarkHistory.length; i++) {
-                                if (configManager.remarkHistory[i].startsWith(
-                                            text)) {
-                                    foundMatch = true
-                                    break
-                                }
-                            }
-
-                            if (foundMatch && !remarkPopup.visible) {
-                                remarkPopup.open()
-                            } else if (!foundMatch && remarkPopup.visible) {
-                                remarkPopup.close()
-                            }
-                        }
-                    }
-
-                    // 历史记录下拉菜单
-                    Popup {
-                        id: remarkPopup
-                        y: backup.height
-                        width: backup.width
-                        implicitHeight: Math.min(
-                                            200,
-                                            remarkContentItem.contentHeight)
-                        padding: 1
-                        background: Rectangle {
-                            color: "#3E3E42"
-                            border.color: "#555555"
-                            border.width: 1
-                            radius: 4
-                        }
-
-                        contentItem: ListView {
-                            id: remarkContentItem
-                            clip: true
-                            implicitHeight: contentHeight
-                            model: {
-                                if (!backup.text)
-                                    return configManager.remarkHistory
-                                return configManager.remarkHistory.filter(
-                                            item => item.toLowerCase().includes(
-                                                backup.text.toLowerCase()))
-                            }
-                            delegate: ItemDelegate {
-                                width: remarkContentItem.width
-                                height: 40
-
-                                contentItem: Text {
-                                    text: modelData
-                                    color: "#ECECEC"
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-
-                                background: Rectangle {
-                                    color: hovered ? "#505050" : "transparent"
-                                }
-
-                                onClicked: {
-                                    backup.showingHistory = true
-                                    backup.text = modelData
-                                    backup.showingHistory = false
-                                    remarkPopup.close()
-                                }
-                            }
-
-                            ScrollIndicator.vertical: ScrollIndicator {}
-                        }
-                    }
                     background: Rectangle {
                         radius: 4
                         color: "#3E3E42"
@@ -345,7 +296,7 @@ Window {
                 CheckBox {
                     id: rememberSession
                     text: qsTr("记住会话")
-                    Layout.topMargin: 12
+                    Layout.topMargin: 8
                     // 使用内容项自定义文本颜色
                     contentItem: Text {
                         text: rememberSession.text
@@ -381,8 +332,8 @@ Window {
                     id: loginButton
                     text: "登录"
                     Layout.fillWidth: true
-                    Layout.topMargin: 12
-                    Layout.preferredHeight: 46
+                    Layout.topMargin: 8
+                    Layout.preferredHeight: 40
 
                     palette {
                         button: "#2980b9"
@@ -392,19 +343,22 @@ Window {
                     font.pixelSize: 16
 
                     onClicked: {
+                        // BUG 数据库操作
+                        // TDB
+                        // 保存到数据库
+                        TtDB.saveLoginInfo(loginName.text, // 登录名
+                                           secretId.text, // SecretId
+                                           secretKey.text, // SecretKey
+                                           backup.text // 备注
+                                           )
                         // 保存配置
-                        configManager.secretId = secretId.text
-                        configManager.secretKey = secretKey.text
-                        // BUG 这里获取 key 值正确
-                        console.log("保存 key: ", configManager.secretKey)
-                        configManager.remark = backup.text
-                        configManager.rememberSession = rememberSession.checked
-                        configManager.saveLoginConfig()
-
-                        // // // 保存到历史记录
-                        // // configManager.addToHistory(secretId.text, backup.text)
-                        // // 保存到历史记录
-                        // configManager.addToHistory(secretId.text, secretKey.text)
+                        // configManager.secretId = secretId.text
+                        // configManager.secretKey = secretKey.text
+                        // console.log("保存 key: ", configManager.secretKey)
+                        // configManager.remark = backup.text
+                        // configManager.rememberSession = rememberSession.checked
+                        // configManager.saveLoginConfig()
+                        // 发出信号
                         loginSuccess()
                         dialog.close()
                     }
@@ -417,7 +371,7 @@ Window {
                     Layout.maximumHeight: 9999 // 增加最大高度，让它更灵活
                     Layout.preferredHeight: 10 // 给一个合理的默认高度
                     Layout.fillWidth: true // 确保水平填充
-                    Layout.preferredWidth: 10 // 防止宽度计算问题
+                    Layout.preferredWidth: 5 // 防止宽度计算问题
                 }
 
                 // 底部版权信息

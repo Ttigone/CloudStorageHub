@@ -8,9 +8,10 @@ TtDB::TtDB(QObject *parent) : QObject{parent} {}
 TtDB *TtDB::instance() { return ins(); }
 
 void TtDB::init() {
-  m_daoLoginInfo.connect();
-  m_daoLoginInfo.createTable();
-  m_loginInfoList = m_daoLoginInfo.select();
+  m_loginInfo.connect();
+  m_loginInfo.createTable();
+  // 初始时查询数据库数据
+  m_loginInfoList = m_loginInfo.select();
 }
 
 void TtDB::saveLoginInfo(const QString &name, const QString &id,
@@ -26,18 +27,19 @@ void TtDB::saveLoginInfo(const QString &name, const QString &id,
   info.timestamp = QDateTime::currentDateTimeUtc().toTime_t();
 #endif
 
-  if (m_daoLoginInfo.exists(info.secret_id)) {
-    m_daoLoginInfo.update(info);
+  if (m_loginInfo.exists(info.secret_id)) {
+    m_loginInfo.update(info);
     m_loginInfoList[indexOfLoginInfo(info.secret_id)] = info;
   } else {
-    m_daoLoginInfo.insert(info);
+    m_loginInfo.insert(info);
     m_loginInfoList.append(info);
   }
+  qDebug() << "保存数据成功";
 }
 
 void TtDB::removeLoginInfo(const QString &id) {
-  if (m_daoLoginInfo.exists(id)) {
-    m_daoLoginInfo.remove(id);
+  if (m_loginInfo.exists(id)) {
+    m_loginInfo.remove(id);
     m_loginInfoList.removeAt(indexOfLoginInfo(id));
   }
 }
@@ -66,4 +68,18 @@ LoginInfo TtDB::loginInfoByName(const QString &name) {
     }
   }
   throw QString::fromLocal8Bit("通过名称查找登录信息失败 %1").arg(name);
+}
+
+QVariantMap TtDB::loginInfoAsMap(const QString &name) {
+  QVariantMap result;
+  try {
+    LoginInfo info = loginInfoByName(name);
+    result["name"] = info.name;
+    result["secret_id"] = info.secret_id;
+    result["secret_key"] = info.secret_key;
+    result["remark"] = info.remark;
+  } catch (const QString &error) {
+    qDebug() << "Error getting login info:" << error;
+  }
+  return result;
 }

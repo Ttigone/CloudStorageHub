@@ -15,7 +15,7 @@ static const QString NAME = FileHelper::joinPath(PATH::TMP, "cos.db");
 };
 
 namespace SQL {
-static const QString LOGIN_INFO_TABLE = ":/static/sql/login_info.sql";
+static const QString LOGIN_INFO_TABLE = ":/sql/login_info.sql";
 };
 
 namespace TABLES {

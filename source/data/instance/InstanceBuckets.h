@@ -33,6 +33,10 @@ public:
     // 在类声明中添加
     Q_INVOKABLE QString getToolTip(int row, int column) const;
 
+    // 在 public 部分添加这个方法
+    Q_INVOKABLE bool updateBucketName(int row, const QString& newName);
+
+
 signals:
     void modelChanged();
 

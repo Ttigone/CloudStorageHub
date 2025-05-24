@@ -67,9 +67,10 @@ Window {
             width: 18
             height: 18
             mipmap: true
-            source: "qrc:///app/example.png"
+            source: "qrc:/resources/app/storage.png"
             fillMode: Image.PreserveAspectFit
-            Component.onCompleted: windowAgent.setSystemButton(WindowAgent.WindowIcon, iconButton)
+            Component.onCompleted: windowAgent.setSystemButton(
+                                       WindowAgent.WindowIcon, iconButton)
         }
 
         Text {
@@ -95,15 +96,16 @@ Window {
             QWKButton {
                 id: minButton
                 height: parent.height
-                source: "qrc:///window-bar/minimize.svg"
+                source: "qrc:/resources/window-bar/minimize.svg"
                 onClicked: window.showMinimized()
-                Component.onCompleted: windowAgent.setSystemButton(WindowAgent.Minimize, minButton)
+                Component.onCompleted: windowAgent.setSystemButton(
+                                           WindowAgent.Minimize, minButton)
             }
 
             QWKButton {
                 id: maxButton
                 height: parent.height
-                source: window.visibility === Window.Maximized ? "qrc:///window-bar/restore.svg" : "qrc:///window-bar/maximize.svg"
+                source: window.visibility === Window.Maximized ? "qrc:/resources/window-bar/restore.svg" : "qrc:/resources/window-bar/maximize.svg"
                 onClicked: {
                     if (window.visibility === Window.Maximized) {
                         window.showNormal()
@@ -111,29 +113,31 @@ Window {
                         window.showMaximized()
                     }
                 }
-                Component.onCompleted: windowAgent.setSystemButton(WindowAgent.Maximize, maxButton)
+                Component.onCompleted: windowAgent.setSystemButton(
+                                           WindowAgent.Maximize, maxButton)
             }
 
             QWKButton {
                 id: closeButton
                 height: parent.height
-                source: "qrc:///window-bar/close.svg"
+                source: "qrc:/resources/window-bar/close.svg"
                 background: Rectangle {
                     color: {
                         if (!closeButton.enabled) {
-                            return "gray";
+                            return "gray"
                         }
                         if (closeButton.pressed) {
-                            return "#e81123";
+                            return "#e81123"
                         }
                         if (closeButton.hovered) {
-                            return "#e81123";
+                            return "#e81123"
                         }
-                        return "transparent";
+                        return "transparent"
                     }
                 }
                 onClicked: window.close()
-                Component.onCompleted: windowAgent.setSystemButton(WindowAgent.Close, closeButton)
+                Component.onCompleted: windowAgent.setSystemButton(
+                                           WindowAgent.Close, closeButton)
             }
         }
     }
