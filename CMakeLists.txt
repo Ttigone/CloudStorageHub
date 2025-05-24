@@ -136,6 +136,7 @@ endif()
 
 set(SUFFIX_EXTRA *.in)
 set(SUFFIX_HPPHEADER *.hpp)
+set(SUFFIX_HHEADER *.h)
 set(SUFFIX_IPPHEADER *.ipp)
 set(SUFFIX_INLHEADER *.inl)
 set(SUFFIX_SOURCE *.cpp)
@@ -149,13 +150,29 @@ elseif(PROJECT_MAIN_TYPE STREQUAL "qtquick")
 endif()
 
 file(GLOB PRECOMPILED precompiled/pch.hpp)
-file(GLOB HEADERS
-        source/${SUFFIX_HPPHEADER}
-        source/${SUFFIX_IPPHEADER}
-        source/${SUFFIX_INLHEADER}
+file(GLOB
+HEADERS
+    source/${SUFFIX_HPPHEADER}
+    source/${SUFFIX_IPPHEADER}
+    source/${SUFFIX_INLHEADER}
+    source/${SUFFIX_HHEADER}
+    source/data/import/${SUFFIX_HHEADER}
+    source/data/instance/${SUFFIX_HHEADER}
+    source/data/models/${SUFFIX_HHEADER}
+    source/helper/${SUFFIX_HHEADER}
+    source/storage/${SUFFIX_HHEADER}
+    source/config/${SUFFIX_HHEADER}
 )
-file(GLOB SOURCES source/${SUFFIX_SOURCE})
 
+file(GLOB
+SOURCES
+    source/${SUFFIX_SOURCE}
+    source/data/import/${SUFFIX_SOURCE}
+    source/data/instance/${SUFFIX_SOURCE}
+    source/data/models/${SUFFIX_SOURCE}
+    source/helper/${SUFFIX_SOURCE}
+    source/storage/${SUFFIX_SOURCE}
+)
 #file(GLOB EXAMPLES
 #     source/examples/${SUFFIX_HPPHEADER}
 #     source/examples/${SUFFIX_SOURCE}
@@ -195,6 +212,7 @@ if(${PROJECT_MAIN_TYPE} STREQUAL "qtwidget")
 endif()
 if(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
    file(GLOB UI_SOURCE ui/qtquick/${SUFFIX_QRC})
+   file(GLOB UI_SOURCE assest/${SUFFIX_QRC})
    file(GLOB UI_QML_SOURCE ui/qtquick/${SUFFIX_QML})
 endif()
 
@@ -314,12 +332,13 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
                 Qt${QT_VERSION_MAJOR}::Widgets
                 )
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick)
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick Sql)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick Sql)
             list(APPEND QT_MODULES Core${SPACE_ARG})
             list(APPEND QT_MODULES Quick${SPACE_ARG})
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Quick
+                Qt${QT_VERSION_MAJOR}::Sql
                 )
         endif()
     endif()
@@ -471,3 +490,42 @@ set(CPACK_GENERATOR "TGZ;ZIP")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A brief description of your project")
 include(CPack)
+
+
+# ----------------------------------------------------------------
+# Set Icon of Window
+# ----------------------------------------------------------------
+function(add_win_rc _target)
+    set(RC_VERSION "0.0.0.0")
+    set(RC_VERSION_STRING "0.0.0.0")
+
+    set(RC_DESCRIPTION ${_target})
+    set(RC_COPYRIGHT ${_target})
+    set(RC_APPLICATION_NAME ${_target})
+
+    get_filename_component(RC_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/ui/qtquick/resources/app/storage.ico" ABSOLUTE)
+
+    set(_out_path "${CMAKE_CURRENT_BINARY_DIR}/${_target}_res.rc")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ui/qtquick/resources/manifest/WinResource.rc.in" ${_out_path} @ONLY)
+    target_sources(${_target} PRIVATE ${_out_path})
+
+endfunction()
+# execute function
+add_win_rc(${PROJECT_NAME})
+
+# set app version'file
+function(add_win_manifest _target)
+    set(_name ${_target})
+    set(_version "0.0.0.0")
+    set(_desc ${_name})
+
+    set(MANIFEST_IDENTIFIER ${_name})
+    set(MANIFEST_VERSION ${_version})
+    set(MANIFEST_DESCRIPTION ${_desc})
+    set(MANIFEST_UTF8)
+    set(_out_path "${CMAKE_CURRENT_BINARY_DIR}/${_target}_manifest.manifest")
+    # message(_out_path)
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ui/qtquick/resources/manifest/WinManifest.manifest.in" ${_out_path} @ONLY)
+    target_sources(${_target} PRIVATE ${_out_path})
+endfunction()
+add_win_manifest(${PROJECT_NAME})

@@ -5,7 +5,9 @@
 
 #include <QWKQuick/qwkquickglobal.h>
 
+#include "data/instance/InstanceBuckets.h"
 #include "source/ConfigManager.hpp"
+#include "storage/TtDb.h"
 
 int main(int argc, char *argv[]) {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -42,6 +44,16 @@ int main(int argc, char *argv[]) {
 
   qmlRegisterType<ConfigManager>("CloudStorageHub", 1, 0, "ConfigManager");
   engine.rootContext()->setContextProperty("configManager", &configManager);
+
+  // 获取 InstanceBuckets 单例实例并注册到 QML
+  auto buckets = InstanceBuckets::instance();
+  buckets->setBuckets(); // 加载数据
+  engine.rootContext()->setContextProperty("instanceBuckets", buckets);
+
+  // auto = InstanceBuckets::instance();
+  // buckets->setBuckets(); // 加载数据
+  // engine.rootContext()->setContextProperty("instanceBuckets", buckets);
+  TDB->init();
 
   const QUrl url(QStringLiteral("qrc:/ui/main.qml"));
   //    const QUrl url(u"qrc:/ui/main.qml"_qs);

@@ -5,12 +5,14 @@
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+#include <memory>
 
 
 class ConfigManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString secretId READ secretId WRITE setSecretId NOTIFY secretIdChanged)
+    Q_PROPERTY(QString secretKey READ secretKey WRITE setSecretKey NOTIFY secretKeyChanged)
     Q_PROPERTY(QString remark READ remark WRITE setRemark NOTIFY remarkChanged)
     Q_PROPERTY(bool rememberSession READ rememberSession WRITE setRememberSession NOTIFY rememberSessionChanged)
     Q_PROPERTY(QStringList secretIdHistory READ secretIdHistory NOTIFY secretIdHistoryChanged)
@@ -41,6 +43,7 @@ public:
     Q_INVOKABLE void loadLoginConfig();
     Q_INVOKABLE void clearLoginConfig();
     Q_INVOKABLE void addToHistory(const QString& secretId, const QString& remark);
+    // Q_INVOKABLE void addToHistory(const QString& secretId, const QString& key);
     Q_INVOKABLE void removeFromHistory(const QString& value);
     Q_INVOKABLE QString findMatchingKey(const QString& secretId);
 
@@ -53,7 +56,8 @@ signals:
     void remarkHistoryChanged();
 
 private:
-    QSettings m_settings;
+    // QSettings m_settings;
+    std::unique_ptr<QSettings> m_settings;
     QString m_secretId;
     QString m_secretKey;
     QString m_remark;

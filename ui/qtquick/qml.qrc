@@ -2,6 +2,7 @@
     <qresource prefix="/ui">
         <file>main.qml</file>
         <file>LoginDialog.qml</file>
+        <file>MainPage.qml</file>
         <file>Component/QWKButton.qml</file>
         <file>Component/FramelessWindow.qml</file>
         <file>Component/TtTextField.qml</file>
@@ -16,8 +17,9 @@
         <file>resources/window-bar/pin.svg</file>
         <file>resources/window-bar/pin-fill.svg</file>
         <file>resources/window-bar/restore.svg</file>
-        <file>resources/app/example.icns</file>
-        <file>resources/app/example.ico</file>
-        <file>resources/app/example.png</file>
+        <file>resources/app/storage.png</file>
+        <file>resources/app/storage.ico</file>
+        <file>resources/icon/download.png</file>
+        <file>resources/icon/upload.png</file>
     </qresource>
 </RCC>
