@@ -6,6 +6,8 @@
 #include <QWKQuick/qwkquickglobal.h>
 
 #include "data/instance/InstanceBuckets.h"
+#include "middle/managerglobal.h"
+#include "plugin/TtPlugin.h"
 #include "source/ConfigManager.hpp"
 #include "storage/TtDb.h"
 
@@ -27,8 +29,6 @@ int main(int argc, char *argv[]) {
 
   QGuiApplication app(argc, argv);
   QQuickWindow::setDefaultAlphaBuffer(true);
-  // 创建配置管理器实例
-  ConfigManager configManager;
   QQmlApplicationEngine engine;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
@@ -42,9 +42,11 @@ int main(int argc, char *argv[]) {
 
   QWK::registerTypes(&engine);
 
-  qmlRegisterType<ConfigManager>("CloudStorageHub", 1, 0, "ConfigManager");
-  // 注册 ConfigManager 到 QML
-  engine.rootContext()->setContextProperty("configManager", &configManager);
+  // // 创建配置管理器实例
+  // ConfigManager configManager;
+  // qmlRegisterType<ConfigManager>("CloudStorageHub", 1, 0, "ConfigManager");
+  // // 注册 ConfigManager 到 QML
+  // engine.rootContext()->setContextProperty("configManager", &configManager);
 
   // 获取 InstanceBuckets 单例实例并注册到 QML
   auto buckets = InstanceBuckets::instance();
@@ -56,6 +58,10 @@ int main(int argc, char *argv[]) {
   // engine.rootContext()->setContextProperty("instanceBuckets", buckets);
   TDB->init();
   engine.rootContext()->setContextProperty("TtDB", TDB);
+
+  TP->installPlugins(argc, argv);
+
+  // mWarning();
 
   const QUrl url(QStringLiteral("qrc:/ui/main.qml"));
   //    const QUrl url(u"qrc:/ui/main.qml"_qs);

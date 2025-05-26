@@ -159,9 +159,15 @@ HEADERS
     source/data/import/${SUFFIX_HHEADER}
     source/data/instance/${SUFFIX_HHEADER}
     source/data/models/${SUFFIX_HHEADER}
+    source/data/config/${SUFFIX_HHEADER}
+    source/data/clouds/${SUFFIX_HHEADER}
+    source/data/logs/${SUFFIX_HHEADER}
     source/helper/${SUFFIX_HHEADER}
     source/storage/${SUFFIX_HHEADER}
     source/config/${SUFFIX_HHEADER}
+    source/middle/models/${SUFFIX_HHEADER}
+    source/middle/${SUFFIX_HHEADER}
+    source/plugin/${SUFFIX_HHEADER}
 )
 
 file(GLOB
@@ -170,8 +176,15 @@ SOURCES
     source/data/import/${SUFFIX_SOURCE}
     source/data/instance/${SUFFIX_SOURCE}
     source/data/models/${SUFFIX_SOURCE}
+    source/data/config/${SUFFIX_SOURCE}
+    source/data/clouds/${SUFFIX_SOURCE}
+    source/data/logs/${SUFFIX_SOURCE}
     source/helper/${SUFFIX_SOURCE}
     source/storage/${SUFFIX_SOURCE}
+    source/config/${SUFFIX_SOURCE}
+    source/middle/models/${SUFFIX_SOURCE}
+    source/middle/${SUFFIX_SOURCE}
+    source/plugin/${SUFFIX_SOURCE}
 )
 #file(GLOB EXAMPLES
 #     source/examples/${SUFFIX_HPPHEADER}
@@ -332,13 +345,15 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
                 Qt${QT_VERSION_MAJOR}::Widgets
                 )
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick Sql)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick Sql)
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent)
             list(APPEND QT_MODULES Core${SPACE_ARG})
             list(APPEND QT_MODULES Quick${SPACE_ARG})
             list(APPEND QT_MODULES_LINK
                 Qt${QT_VERSION_MAJOR}::Quick
                 Qt${QT_VERSION_MAJOR}::Sql
+                Qt${QT_VERSION_MAJOR}::Core5Compat
+                Qt${QT_VERSION_MAJOR}::Concurrent
                 )
         endif()
     endif()
@@ -529,3 +544,5 @@ function(add_win_manifest _target)
     target_sources(${_target} PRIVATE ${_out_path})
 endfunction()
 add_win_manifest(${PROJECT_NAME})
+
+# add_subdirectory(source/test/)

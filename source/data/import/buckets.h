@@ -1,20 +1,15 @@
 #ifndef DAOBUCKETS_H
 #define DAOBUCKETS_H
 
-#include "data/models/TtBucket.h"
+#include "middle/models/cloudmodels.h"
 #include <QList>
 
-class ImportBuckets
-{
+class ImportBuckets {
 public:
-    ImportBuckets();
+  ImportBuckets();
 
-    ///
-    /// @brief bucketsFromMock
-    /// @param path 解析的 json 文件
-    /// @return
-    /// mock 测试
-    QList<TtBucket> bucketsFromMock(const QString& path);
+  /// mock 测试
+  QList<TtBucket> setBuckets(const QString &path);
 };
 
 #endif // DAOBUCKETS_H

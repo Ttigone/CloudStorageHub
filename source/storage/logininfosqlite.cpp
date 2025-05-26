@@ -1,53 +1,53 @@
-﻿#include "storage/TtLoginInfo.h"
-#include "config/config.h"
+﻿#include "storage/LoginInfoSqlite.h"
+#include "config/global.h"
 
-TtLoginInfo::TtLoginInfo() {}
+LoginInfoSqlite::LoginInfoSqlite() {}
 
-bool TtLoginInfo::exists(const QString &secretId) {
+bool LoginInfoSqlite::exists(const QString &secretId) {
   QString sql = QString("select id from %1 where  "
                         "secret_id = '%2';")
-                    .arg(CONF::TABLES::LOGIN_INFO, secretId);
+                    .arg(GLOBAL::TABLES::LOGIN_INFO, secretId);
   return m_db.exists(sql);
 }
 
-void TtLoginInfo::insert(const LoginInfo &info) {
+void LoginInfoSqlite::insert(const LoginInfo &info) {
   QString sql =
       QString("insert into %1 (name, secret_id, secret_key, remark, timestamp) "
               "values (?, ?, ?, ?, ?)")
-          .arg(CONF::TABLES::LOGIN_INFO);
+          .arg(GLOBAL::TABLES::LOGIN_INFO);
   QVariantList varList;
   varList << info.name << info.secret_id << info.secret_key << info.remark
           << info.timestamp;
   m_db.exec(sql, varList);
 }
 
-void TtLoginInfo::update(const LoginInfo &info) {
+void LoginInfoSqlite::update(const LoginInfo &info) {
   QString sql = QString("update %1 "
                         "set name=?, "
                         "secret_key==?, "
                         "remark=?, "
                         "timestamp=? "
                         "where secret_id = ?")
-                    .arg(CONF::TABLES::LOGIN_INFO);
+                    .arg(GLOBAL::TABLES::LOGIN_INFO);
   QVariantList varList;
   varList << info.name << info.secret_key << info.remark << info.timestamp
           << info.secret_id;
   m_db.exec(sql, varList);
 }
 
-void TtLoginInfo::remove(const QString &secretId) {
+void LoginInfoSqlite::remove(const QString &secretId) {
   QString sql = QString("delete from %1 where  "
                         "secret_id = ?;")
-                    .arg(CONF::TABLES::LOGIN_INFO);
+                    .arg(GLOBAL::TABLES::LOGIN_INFO);
   QVariantList varList;
   varList << secretId;
   m_db.exec(sql, varList);
 }
 
-QList<LoginInfo> TtLoginInfo::select() {
+QList<LoginInfo> LoginInfoSqlite::select() {
   QString sql = QString("select name, secret_id, secret_key, remark from %1 "
                         "order by timestamp desc;")
-                    .arg(CONF::TABLES::LOGIN_INFO);
+                    .arg(GLOBAL::TABLES::LOGIN_INFO);
 
   QList<LoginInfo> retList;
   QList<RECORD> recordList = m_db.select(sql);
@@ -63,12 +63,12 @@ QList<LoginInfo> TtLoginInfo::select() {
   return retList;
 }
 
-void TtLoginInfo::connect() {
-  // qDebug() << CONF::SQLITE::NAME;
-  m_db.connect(CONF::SQLITE::NAME);
+void LoginInfoSqlite::connect() {
+  // qDebug() << GLOBAL::SQLITE::NAME;
+  m_db.connect(GLOBAL::SQLITE::NAME);
 }
 
-void TtLoginInfo::createTable() {
-  QString sql = FileHelper::readAllTxt(CONF::SQL::LOGIN_INFO_TABLE);
+void LoginInfoSqlite::createTable() {
+  QString sql = FileHelper::readAllTxt(GLOBAL::SQL::LOGIN_INFO_TABLE);
   m_db.exec(sql);
 }

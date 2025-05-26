@@ -149,6 +149,60 @@ Item {
             }
         }
     }
+    // 添加一个属性来存储当前面包屑路径
+    property var breadcrumbPathData: []
+
+    // 修改 folderSelected 信号处理
+    onFolderSelected: function (folderId) {
+        console.log("选择文件夹:", folderId)
+
+        // 更新面包屑路径
+        if (folderId === "all") {
+            // 回到根目录
+            breadcrumbPathData = [{
+                                      "id": "all",
+                                      "name": "全部文件"
+                                  }]
+        } else {
+            // 查找当前选中的文件夹对象
+            let folderObj = null
+
+            // 从实例存储桶中查找
+            if (instanceBuckets && instanceBuckets.model) {
+                for (var i = 0; i < instanceBuckets.bucketCount(); i++) {
+                    const name = instanceBuckets.getBucketData(i, 0)
+                    if (name === folderId) {
+                        folderObj = {
+                            "id": name,
+                            "name": name
+                        }
+                        break
+                    }
+                }
+            }
+
+            if (folderObj) {
+                // 检查面包屑路径中是否已存在此文件夹
+                const existingIndex = breadcrumbPathData.findIndex(
+                                        item => item.id === folderObj.id)
+
+                if (existingIndex >= 0) {
+                    // 如果存在，截断到此位置
+                    breadcrumbPathData = breadcrumbPathData.slice(
+                                0, existingIndex + 1)
+                } else {
+                    // 如果不存在，添加到路径末尾
+                    breadcrumbPathData.push(folderObj)
+                }
+            }
+        }
+
+        // 更新面包屑组件的数据
+        breadcrumbPath.currentPath = breadcrumbPathData
+
+        // 刷新表格显示
+        tableView.refreshData()
+    }
 
     // BUG 添加退出登录的按钮
     // 整体布局
@@ -671,6 +725,96 @@ Item {
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 0
+                        // 面包屑导航条
+                        Rectangle {
+                            id: breadcrumbBar
+                            Layout.fillWidth: true
+                            height: 40
+                            color: "#F0F2F5"
+
+                            RowLayout {
+                                anchors {
+                                    fill: parent
+                                    leftMargin: 16
+                                    rightMargin: 16
+                                }
+                                spacing: 4
+
+                                // 主页/根目录图标
+                                Rectangle {
+                                    width: 24
+                                    height: 24
+                                    color: "transparent"
+                                    Layout.alignment: Qt.AlignVCenter
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "🏠"
+                                        font.pixelSize: 16
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            // 导航到根目录
+                                            rootItem.folderSelected("all")
+                                        }
+                                    }
+                                }
+
+                                // 动态生成的面包屑路径
+                                Row {
+                                    id: breadcrumbPath
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 4
+
+                                    // 绑定到当前文件夹路径
+                                    property var currentPath: []
+
+                                    // 使用Repeater动态创建面包屑项
+                                    Repeater {
+                                        model: breadcrumbPath.currentPath
+
+                                        Row {
+                                            spacing: 4
+
+                                            // 分隔符
+                                            Text {
+                                                text: "/"
+                                                font.pixelSize: 14
+                                                color: "#666666"
+                                                verticalAlignment: Text.AlignVCenter
+                                                height: 24
+                                                visible: index > 0
+                                                         || modelData.id !== "all"
+                                            }
+
+                                            // 文件夹名称
+                                            Text {
+                                                text: modelData.name
+                                                font.pixelSize: 14
+                                                color: "#0066CC"
+                                                verticalAlignment: Text.AlignVCenter
+                                                height: 24
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        // 导航到此文件夹
+                                                        rootItem.folderSelected(
+                                                                    modelData.id)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // 表格标题栏
                         Rectangle {
                             id: headerBar
@@ -995,29 +1139,6 @@ Item {
                                                     selectAll()
                                                 }
                                             }
-                                            // onAccepted: {
-                                            //     // 保存编辑后的值
-                                            //     if (text !== display) {
-                                            //         // 更新模型
-                                            //         const rowData = tableModel.getRow(
-                                            //                           row)
-                                            //         rowData.name = text
-                                            //         // 将修改写回模型 - 这是关键步骤
-                                            //         // tableModel.setRow(row, rowData)
-                                            //         rootItem.requestModelUpdate(
-                                            //                     row, "name",
-                                            //                     text)
-                                            //         console.log("重命名项目:",
-                                            //                     display, "为",
-                                            //                     text)
-                                            //         // 强制视图刷新
-                                            //         tableView.forceLayout()
-                                            //         // 确实重命名输出了, 但是没有本质改变底层 model
-                                            //     }
-                                            //     // 重置编辑状态
-                                            //     tableView.editingRow = -1
-                                            //     tableView.editingColumn = -1
-                                            // }
                                             // 修改编辑字段的 onAccepted 处理器
                                             onAccepted: {
                                                 // 保存编辑后的值

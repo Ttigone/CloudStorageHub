@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.Controls.Basic
 import Qt.labs.platform 1.1
-import CloudStorageHub 1.0
+// import CloudStorageHub 1.0
 // import QtGraphicalEffects 1.15  // 添加这行用于DropShadow
 import Qt5Compat.GraphicalEffects
 import QWindowKit

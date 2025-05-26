@@ -4,7 +4,8 @@
 #include <QObject>
 
 #include "helper/dbsqlite.h"
-#include "storage/TtLogininfo.h"
+// #include "storage/TtLogininfo.h"
+#include "storage/logininfosqlite.h"
 
 #define TDB TtDB::instance()
 
@@ -58,7 +59,7 @@ public:
   ///
   /// @brief loginInfoAsMap
   /// @param name
-  /// @return 
+  /// @return
   /// 根据登录名返回登录信息的Map (专供QML使用)
   Q_INVOKABLE QVariantMap loginInfoAsMap(const QString &name);
 
@@ -66,7 +67,8 @@ signals:
   void loginNameListChanged();
 
 private:
-  TtLoginInfo m_loginInfo;
+  // TtLoginInfo m_loginInfo;
+  LoginInfoSqlite m_loginInfo;
 
   ///
   /// @brief m_loginInfoList
