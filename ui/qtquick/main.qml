@@ -104,11 +104,10 @@ Window {
         id: windowAgent
     }
 
-    TapHandler {
-        acceptedButtons: Qt.RightButton
-        onTapped: contextMenu.open()
-    }
-
+    // TapHandler {
+    //     acceptedButtons: Qt.RightButton
+    //     onTapped: contextMenu.open()
+    // }
     Rectangle {
         id: titleBar
         anchors {
