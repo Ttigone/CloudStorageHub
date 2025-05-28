@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/">
+        <file>testing/business.json</file>
+        <file>testing/custom.json</file>
+        <file>sql/login_info.sql</file>
+        <file>version/config_default.json</file>
+        <file>docs/errorcode.csv</file>
+        <file>testing/buckets1.json</file>
+        <file>testing/buckets2.json</file>
+        <file>configs/cosconfig.json</file>
+        <file>configs/default_config.json</file>
+    </qresource>
+</RCC>

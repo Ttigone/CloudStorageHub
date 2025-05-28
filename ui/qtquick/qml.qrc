@@ -1,0 +1,28 @@
+<RCC>
+    <qresource prefix="/ui">
+        <file>main.qml</file>
+        <file>LoginDialog.qml</file>
+        <file>MainPage.qml</file>
+        <file>PreferencesDialog.qml</file>
+        <file>Component/QWKButton.qml</file>
+        <file>Component/FramelessWindow.qml</file>
+        <file>Component/TtTextField.qml</file>
+        <file>Component/HistoryTextField.qml</file>
+        <file>Component/TtMenu.qml</file>
+        <file>Component/TtSplitView.qml</file>
+    </qresource>
+    <qresource prefix="/">
+        <file>resources/window-bar/close.svg</file>
+        <file>resources/window-bar/fullscreen.svg</file>
+        <file>resources/window-bar/maximize.svg</file>
+        <file>resources/window-bar/minimize.svg</file>
+        <file>resources/window-bar/more-line.svg</file>
+        <file>resources/window-bar/pin.svg</file>
+        <file>resources/window-bar/pin-fill.svg</file>
+        <file>resources/window-bar/restore.svg</file>
+        <file>resources/app/storage.png</file>
+        <file>resources/app/storage.ico</file>
+        <file>resources/icon/download.png</file>
+        <file>resources/icon/upload.png</file>
+    </qresource>
+</RCC>
