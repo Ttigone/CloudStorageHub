@@ -56,7 +56,6 @@ signals:
     void remarkHistoryChanged();
 
 private:
-    // QSettings m_settings;
     std::unique_ptr<QSettings> m_settings;
     QString m_secretId;
     QString m_secretKey;

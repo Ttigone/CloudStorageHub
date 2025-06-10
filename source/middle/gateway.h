@@ -55,23 +55,29 @@ private:
    */
   void apiDeleteBucket(const QJsonValue &params);
 
-  /**
-   * @brief 获取对象列表
-   * @param params
-   */
+  ///
+  /// @brief apiGetObjects 获取对象列表
+  /// @param params
+  ///
   void apiGetObjects(const QJsonValue &params);
 
-  /**
-   * @brief 上传对象
-   * @param params
-   */
+  ///
+  /// @brief apiPutObject 上传对象
+  /// @param params
+  ///
   void apiPutObject(const QJsonValue &params);
 
-  /**
-   * @brief 下载对象
-   * @param params
-   */
+  ///
+  /// @brief apiDownLoadObject 下载对象
+  /// @param params
+  ///
   void apiDownLoadObject(const QJsonValue &params);
+
+  ///
+  /// @brief apiDeleteObject 删除对象
+  /// @param params
+  ///
+  void apiDeleteObject(const QJsonValue &params);
 };
 
 #endif // GATEWAY_H

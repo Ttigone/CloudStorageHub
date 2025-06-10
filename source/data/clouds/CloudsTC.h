@@ -42,6 +42,8 @@ public:
                  const std::string &localPath,
                  const TransProgressCallback &callback) override;
 
+  void deleteObject(const std::string &bucket, const std::string &key) override;
+
 private:
   ///
   /// @brief getDirList 获取当前层级文件夹

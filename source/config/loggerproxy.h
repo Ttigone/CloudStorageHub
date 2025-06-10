@@ -86,14 +86,10 @@ public:
    */
   void setLevel(GLOBAL::LOG_LEVEL newLevel);
 
-  /**
-   * @brief 设置日志具体派生类
-   *
-   * 在插件层调用
-   *
-   * @param newLogger log派生类
-   */
-  // void setLogger(BasicLogger *newLogger);
+  ///
+  /// @brief setLogger 设置具体日志类
+  /// @param newLogger 日志类实例
+  ///
   void setLogger(BaseLogger *newLogger);
 
 signals:

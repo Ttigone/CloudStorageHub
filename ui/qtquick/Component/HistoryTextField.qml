@@ -6,45 +6,63 @@ import Qt5Compat.GraphicalEffects
 TextField {
     id: control
 
-    // 公开属性
-    property var historyModel: [] // 历史记录模型
-    property bool passwordMode: false // 是否为密码输入模式
-    property string historyIconText: "⟳" // 历史记录图标
-    property bool showingHistory: false // 防止循环触发
+    // 现有属性
+    property var historyModel: [] // 数组形式
+    property bool passwordMode: false
+    property string historyIconText: "⟳"
+    property bool showingHistory: false
+
+    // 补全
+    property var completionModel: []
+    property bool enableCompletion: true
+    property string completionIconText: "📁"
+    property int maxCompletionItems: 8
 
     // 设置样式
-    color: "#FFFFFF"
+    color: "transparent"
     placeholderTextColor: "#8A8A8A"
     selectByMouse: true
     height: 40
-    // 密码模式
     echoMode: passwordMode ? TextInput.Password : TextInput.Normal
 
-    // 当历史项被选择时发出的信号
+    // 信号
     signal historyItemSelected(string value)
+    signal completionItemSelected(string value)
+    signal requestRemoveHistory(string value)
 
+    // 删除历史记录信号
+    function getFilteredCompletions(inputText) {
+        if (!inputText || inputText.length === 0) {
+            return []
+        }
+
+        var filtered = []
+        var lowerInput = inputText.toLowerCase()
+
+        for (var i = 0; i < completionModel.length
+             && filtered.length < maxCompletionItems; i++) {
+            var item = completionModel[i]
+            if (item && typeof item === 'string') {
+                if (item.toLowerCase().startsWith(lowerInput)) {
+                    filtered.push(item)
+                }
+            } else if (item && item.name) {
+                if (item.name.toLowerCase().startsWith(lowerInput)) {
+                    filtered.push(item.name)
+                }
+            }
+        }
+
+        return filtered
+    }
+
+    // 切换弹窗函数
     function togglePopup(forceState) {
-        // if (forceState === true) {
-        //     // 不可视并且当前有数据源
-        //     if (!historyPopup.visible && historyModel.length > 0) {
-        //         historyPopup.open()
-        //     } else if (forceState === false) {
-        //         if (historyPopup.visible) {
-        //             historyPopup.close()
-        //         }
-        //     } else {
-        //         // 切换状态
-        //         if (historyModel.length > 0) {
-        //             if (historyPopup.visible) {
-        //                 historyPopup.close()
-        //             } else {
-        //                 historyPopup.open()
-        //             }
-        //         }
-        //     }
-        // }
-        // 没有历史记录时不显示
-        if (historyModel.length === 0) {
+        var hasHistory = historyModel.length > 0
+        var hasCompletions = enableCompletion && getFilteredCompletions(
+                    text).length > 0
+
+        if (!hasHistory && !hasCompletions) {
             return
         }
 
@@ -57,7 +75,6 @@ TextField {
                 historyPopup.close()
             }
         } else {
-            // 切换状态
             if (historyPopup.visible) {
                 historyPopup.close()
             } else {
@@ -66,7 +83,7 @@ TextField {
         }
     }
 
-    // 背景
+    // 背景样式
     background: Rectangle {
         radius: 4
         color: "#3E3E42"
@@ -74,14 +91,77 @@ TextField {
         border.width: 1
     }
 
-    Keys.onDownPressed: {
-        if (!activeFocus) {
-            // 仅在失去焦点时关闭popup
-            togglePopup(false)
+    // // 键盘事件处理
+    // Keys.onDownPressed: {
+    //     if (historyPopup.visible && historyPopup.listView) {
+    //         if (historyPopup.listView.currentIndex < historyPopup.listView.count - 1) {
+    //             historyPopup.listView.currentIndex++
+    //         }
+    //     }
+    // }
+        // ✅ 修复4: 优化键盘事件处理
+    Keys.onDownPressed: function(event) {
+        if (historyPopup.visible && historyPopup.listView) {
+            if (historyPopup.listView.currentIndex < historyPopup.listView.count - 1) {
+                historyPopup.listView.currentIndex++
+            }
+            event.accepted = true
         }
     }
 
-    // 添加鼠标区域来处理右键点击
+    // Keys.onUpPressed: {
+    //     if (historyPopup.visible && historyPopup.listView) {
+    //         if (historyPopup.listView.currentIndex > 0) {
+    //             historyPopup.listView.currentIndex--
+    //         }
+    //     }
+    // }
+        Keys.onUpPressed: function(event) {
+        if (historyPopup.visible && historyPopup.listView) {
+            if (historyPopup.listView.currentIndex > 0) {
+                historyPopup.listView.currentIndex--
+            }
+            event.accepted = true
+        }
+    }
+
+    // Keys.onReturnPressed: {
+    //     if (historyPopup.visible && historyPopup.listView
+    //             && historyPopup.listView.currentIndex >= 0) {
+    //         var currentData = historyPopup.getCurrentItemData()
+    //         if (currentData) {
+    //             if (currentData.isCompletion) {
+    //                 completionItemSelected(currentData.text)
+    //                 text = currentData.text
+    //             } else {
+    //                 historyItemSelected(currentData.text)
+    //                 text = currentData.text
+    //             }
+    //             historyPopup.close()
+    //         }
+    //     } else {
+    //         accepted()
+    //     }
+    // }
+        Keys.onReturnPressed: function(event) {
+        if (historyPopup.visible && historyPopup.listView && historyPopup.listView.currentIndex >= 0) {
+            var currentData = historyPopup.getCurrentItemData()
+            if (currentData) {
+                if (currentData.isCompletion) {
+                    completionItemSelected(currentData.text)
+                } else {
+                    historyItemSelected(currentData.text)
+                }
+                control.text = currentData.text
+                historyPopup.close()
+            }
+            event.accepted = true
+        } else {
+            accepted()
+        }
+    }
+
+    // 鼠标区域处理
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.RightButton
@@ -90,35 +170,21 @@ TextField {
         cursorShape: Qt.IBeamCursor
 
         onClicked: function (mouse) {
-            console.log("button on lcicked")
-            // 为什么判断时右键
             if (mouse.button === Qt.RightButton) {
-                togglePopup(true)
                 mouse.accepted = true
             } else {
                 mouse.accepted = false
-
-                // 然后如果满足条件就打开popup
-                if (!historyPopup.visible && historyModel.length > 0) {
-                    // 延迟一点打开popup以确保文本框先处理点击
-                    Qt.callLater(function () {
-                        togglePopup(true)
-                    })
-                }
             }
         }
 
-        // 确保鼠标事件传递给 TextField
         onPressed: function (mouse) {
-            // console.log("press")
-            // mouse.accepted = false // 让事件继续传递
             mouse.accepted = mouse.button === Qt.RightButton
         }
         onReleased: function (mouse) {
             mouse.accepted = mouse.button === Qt.RightButton
         }
         onDoubleClicked: function (mouse) {
-            mouse.accepted = false // 允许文本选择
+            mouse.accepted = false
         }
         onPositionChanged: function (mouse) {
             mouse.accepted = false
@@ -126,388 +192,404 @@ TextField {
     }
 
     // 文本变化处理
-    onTextChanged: {
-        if (text && !showingHistory && historyModel.length > 0) {
-            // 如果有匹配项，显示下拉菜单
-            // let foundMatch = false
-            // for (var i = 0; i < historyModel.length; i++) {
-            //     if (historyModel[i].startsWith(text)) {
-            //         foundMatch = true
-            //         break
-            //     }
-            // }
-            // if (foundMatch && !historyPopup.visible) {
-            //     historyPopup.open()
-            // } else if (!foundMatch && historyPopup.visible) {
-            //     historyPopup.close()
-            // }
-            if (text && !showingHistory && historyModel.length > 0) {
-                // 检查是否有匹配项
-                let foundMatch = historyModel.some(
-                        item => item.toLowerCase().includes(text.toLowerCase()))
+    // onTextChanged: {
+    //     if (!showingHistory) {
+    //         var hasHistory = historyModel.length > 0
+    //         console.log("hasHistory", hasHistory)
+    //         // 都是 false
+    //         var hasCompletions = enableCompletion && getFilteredCompletions(
+    //                     text).length > 0
+    //         console.log("hasCompletions: ", hasCompletions)
+    //         if ((hasHistory || hasCompletions) && !historyPopup.visible
+    //                 && text.length > 0) {
+    //             historyPopup.open()
+    //         } else if (!hasHistory && !hasCompletions && historyPopup.visible) {
+    //             historyPopup.close()
+    //         }
+    //     }
+    // }
 
-                // 根据是否匹配决定是显示还是隐藏popup
-                togglePopup(foundMatch)
-            }
+    // ✅ 修复6: 优化文本变化处理
+    onTextChanged: {
+        // 简化文本变化处理，避免影响输入
+        if (enableCompletion || historyModel.length > 0) {
+            // 延迟处理，避免影响当前输入
+            Qt.callLater(function() {
+                var hasHistory = historyModel.length > 0
+                var hasCompletions = enableCompletion && getFilteredCompletions(text).length > 0
+                
+                if (hasHistory || hasCompletions) {
+                    if (!historyPopup.visible && text.length > 0) {
+                        historyPopup.open()
+                    }
+                } else if (historyPopup.visible) {
+                    historyPopup.close()
+                }
+            })
         }
     }
 
-    // 历史记录弹出菜单
+    // 美化的历史记录/补全弹出菜单
     Popup {
         id: historyPopup
-        y: control.height
+        y: control.height + 2
         width: control.width
-        implicitHeight: Math.min(220, contentItem.contentHeight)
-        padding: 1
+        implicitHeight: Math.min(320, contentItem.contentHeight)
+        padding: 0
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-        focus: true // 默认打开 ???
+        // focus: true
+        focus: false
         modal: false
 
-        // 添加进入/退出动画
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0.0
-                to: 1.0
-                duration: 150
-                easing.type: Easing.OutCubic
+        property alias listView: popupListView
+
+        function getCurrentItemData() {
+            if (popupListView.currentIndex >= 0
+                    && popupListView.currentIndex < popupListView.count) {
+                return popupListView.model[popupListView.currentIndex]
             }
-            NumberAnimation {
-                property: "scale"
-                from: 0.95
-                to: 1.0
-                duration: 150
-                easing.type: Easing.OutCubic
+            return null
+        }
+        enter: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    property: "scale"
+                    from: 0.95
+                    to: 1.0
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    property: "y"
+                    from: control.height - 5
+                    to: control.height + 2
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
             }
         }
 
         exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1.0
-                to: 0.0
-                duration: 100
-                easing.type: Easing.InCubic
-            }
-            NumberAnimation {
-                property: "scale"
-                from: 1.0
-                to: 0.95
-                duration: 100
-                easing.type: Easing.InCubic
-            }
-        }
-        // 添加打开和关闭处理
-        onOpened: {
-            if (!control.activeFocus) {
-                control.forceActiveFocus()
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "opacity"
+                    from: 1
+                    to: 0
+                    duration: 150
+                }
+                NumberAnimation {
+                    property: "scale"
+                    from: 1.0
+                    to: 0.95
+                    duration: 150
+                }
             }
         }
-        // 添加这段代码
-        onClosed: {
 
-            // 重置 popup 状态，确保下次可以打开
-            // control.forceActiveFocus();
-            // 确保关闭后可以再次打开
-            // if (control.activeFocus) {
-            //     // 如果控件仍有焦点，恢复焦点以便再次打开
-            //     control.focus = false
-            //     control.focus = true
-            // }
+        onOpened: {
+            popupListView.currentIndex = 0
         }
-        // 设定变换原点在顶部中心
+
+        onClosed: {
+            popupListView.currentIndex = -1
+        }
+
         transformOrigin: Popup.Top
 
-        // 美化背景
         background: Rectangle {
-            color: "#3E3E42"
-            border.color: "#555555"
+            color: "#2A2A2A" 
+            radius: 8
+            border.color: "#404040"
             border.width: 1
-            radius: 6
 
-            // 添加阴影效果
+            // 顶部指示器
+            Rectangle {
+                width: 20
+                height: 3
+                radius: 1.5
+                color: "#505050" // 深色指示器
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 6
+            }
+
             layer.enabled: true
             layer.effect: DropShadow {
-                transparentBorder: true
                 horizontalOffset: 0
-                verticalOffset: 2
-                radius: 8.0
-                samples: 17
-                color: Qt.rgba(0, 0, 0, 0.5)
+                verticalOffset: 8
+                radius: 16
+                samples: 33
+                color: "#40000000" // 加深阴影
+                spread: 0.1
             }
         }
 
         contentItem: ListView {
-            id: historyList
+            id: popupListView
             clip: true
-            implicitHeight: contentHeight
+            // 修改模型构建逻辑 - 确保所有项目都有完整的属性结构
             model: {
-                if (!control.text)
-                    return control.historyModel
-                return control.historyModel.filter(
-                            item => item.toLowerCase().includes(
-                                control.text.toLowerCase()))
+                var result = []
+                // 添加自动补全项
+                if (enableCompletion && control.text.length > 0) {
+                    var completions = getFilteredCompletions(control.text)
+                    for (var i = 0; i < completions.length; i++) {
+                        result.push({
+                                        "text": completions[i],
+                                        "icon": completionIconText,
+                                        "isCompletion": true,
+                                        "description": "文件/文件夹",
+                                        "showDelete": false,
+                                        "isSeparator": false // 明确设置为 false
+                                    })
+                    }
+                }
+
+                // 添加分隔符（如果两种类型都有）
+                if (result.length > 0 && historyModel.length > 0) {
+                    result.push({
+                                    "text": "",
+                                    "icon": "",
+                                    "isCompletion": false,
+                                    "isSeparator": true,
+                                    "description"// 明确设置为 true
+                                    : "",
+                                    "showDelete": false
+                                })
+                }
+
+                // 添加历史记录项 - 重要：处理字符串数组
+                for (var j = 0; j < historyModel.length; j++) {
+                    var historyItem = historyModel[j]
+                    // 如果 historyModel 的项目是字符串，需要包装成对象
+                    var itemText = typeof historyItem
+                            === 'string' ? historyItem : (historyItem.text
+                                                          || historyItem.toString(
+                                                              ))
+
+                    result.push({
+                                    "text": itemText,
+                                    "icon": historyIconText,
+                                    "isCompletion": false,
+                                    "description": "历史记录",
+                                    "showDelete": true,
+                                    "isSeparator"// 历史记录显示删除按钮
+                                    : false // 明确设置为 false
+                                })
+                }
+
+                return result
             }
-            // // 添加顶部标题
-            // header: Rectangle {
-            //     width: historyList.width
-            //     height: 30
-            //     color: "#2D2D30"
 
-            //     Text {
-            //         anchors {
-            //             left: parent.left
-            //             leftMargin: 12
-            //             verticalCenter: parent.verticalCenter
-            //         }
-            //         text: "历史记录"
-            //         color: "#AAAAAA"
-            //         font.pixelSize: 12
-            //     }
-            // }
-            delegate: ItemDelegate {
-                id: historyItem
-                width: historyList.width
-                height: 40
-
-                // 高亮动画
+            delegate: Item {
+                width: popupListView.width
+                height: (modelData && modelData.isSeparator) ? 9 : 48
+                // 分隔线 - 添加安全检查
                 Rectangle {
-                    id: highlightRect
-                    anchors.fill: parent
-                    color: "#4080C0"
-                    opacity: 0
-                    radius: 4
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 150
-                        }
-                    }
+                    visible: modelData && modelData.isSeparator === true
+                    anchors.centerIn: parent
+                    width: parent.width - 24
+                    height: 1
+                    color: "#E0E6ED"
+                    z: 1
                 }
 
-                contentItem: Item {
+                Rectangle {
+                    id: itemBackground
+                    visible: modelData && modelData.isSeparator !== true
                     anchors.fill: parent
+                    anchors.margins: 4
+                    radius: 6
 
-                    // 图标
-                    Rectangle {
-                        id: iconCircle
-                        anchors {
-                            left: parent.left
-                            leftMargin: 10
-                            verticalCenter: parent.verticalCenter
+                    color: {
+                        if (popupListView.currentIndex === index) {
+                            return (modelData
+                                    && modelData.isCompletion) ? "#EBF3FF" : "#F8F9FA"
                         }
-                        width: 22
-                        height: 22
-                        radius: 11
-                        color: "#3498DB"
-                        opacity: 0.7
+                        return itemMouseArea.containsMouse ? "#F5F7FA" : "transparent"
+                    }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: control.historyIconText
-                            color: "#FFFFFF"
-                            font.pixelSize: 14
+                    border.color: {
+                        if (popupListView.currentIndex === index) {
+                            return (modelData
+                                    && modelData.isCompletion) ? "#3B82F6" : "#6B7280"
+                        }
+                        return "transparent"
+                    }
+                    border.width: popupListView.currentIndex === index ? 1 : 0
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 100
                         }
                     }
 
-                    // 文本
-                    Text {
-                        anchors {
-                            left: iconCircle.right
-                            leftMargin: 10
-                            right: deleteButton.left
-                            rightMargin: 5
-                            verticalCenter: parent.verticalCenter
+                    Behavior on border.color {
+                        ColorAnimation {
+                            duration: 100
                         }
-                        text: modelData
-                        color: "#ECECEC"
-                        font.pixelSize: 13
-                        elide: Text.ElideRight
                     }
 
-                    // 删除按钮
-                    Rectangle {
+                    Row {
+                        visible: modelData && modelData.isSeparator !== true
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.right: (modelData
+                                        && modelData.showDelete) ? deleteButton.left : parent.right
+                        anchors.rightMargin: (modelData
+                                              && modelData.showDelete) ? 8 : 12
+                        spacing: 10
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+
+                            Text {
+                                text: modelData ? (modelData.text || "") : ""
+                                // text: "测试"
+                                font.pixelSize: 14
+                                color: "#000000" // 白色文字在深色背景上
+                                font.weight: (modelData
+                                              && modelData.isCompletion) ? Font.Medium : Font.Normal
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+                            // 描述文字 - 浅灰色
+                            Text {
+                                text: modelData ? (modelData.description
+                                                   || "") : ""
+                                font.pixelSize: 11
+                                color: "#9CA3AF" // 浅灰色描述文字
+                                visible: modelData && modelData.description
+                                         && modelData.description !== ""
+                            }
+                        }
+                    }
+
+                    // 删除按钮 - 添加安全检查
+                    Button {
                         id: deleteButton
-                        anchors {
-                            right: parent.right
-                            rightMargin: 8
-                            verticalCenter: parent.verticalCenter
-                        }
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: deleteMouseArea.containsMouse ? "#e74c3c" : "transparent"
-                        border.color: deleteMouseArea.containsMouse ? "#c0392b" : "#AAAAAA"
-                        border.width: 1
-                        visible: historyItem.hovered
+                        visible: modelData && modelData.showDelete === true
+                                 && modelData.isSeparator !== true
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 28
+                        height: 28
 
-                        // 添加动画
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 150
+                        background: Rectangle {
+                            radius: 6
+                            color: {
+                                if (deleteButton.pressed)
+                                    return "#FEE2E2"
+                                if (deleteButton.hovered)
+                                    return "#FEF2F2"
+                                return "transparent"
                             }
-                        }
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 100
-                            }
-                        }
+                            border.color: deleteButton.hovered ? "#FECACA" : "transparent"
+                            border.width: 1
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "×"
-                            color: deleteMouseArea.containsMouse ? "#FFFFFF" : "#AAAAAA"
-                            font.pixelSize: 14
-                            font.bold: true
-                        }
-
-                        // 删除按钮鼠标区域
-                        MouseArea {
-                            id: deleteMouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-
-                            property string itemText: modelData
-
-                            onPressed: {
-                                parent.scale = 0.9
-                            }
-
-                            onReleased: {
-                                parent.scale = 1.0
-                            }
-
-                            // 删除按钮的动作
-                            onClicked: {
-                                deleteAnimation.itemToRemove = modelData // 设置要删除的项
-                                deleteAnimation.start()
-                            }
-                        }
-
-                        // 删除动画
-                        SequentialAnimation {
-                            id: deleteAnimation
-
-                            // 红色闪动
-                            ColorAnimation {
-                                target: highlightRect
-                                property: "color"
-                                to: "#e74c3c"
-                                duration: 150
-                            }
-
-                            // 缩放退出
-                            ParallelAnimation {
-                                NumberAnimation {
-                                    target: historyItem
-                                    property: "opacity"
-                                    to: 0
-                                    duration: 200
-                                    easing.type: Easing.InQuad
-                                }
-                                NumberAnimation {
-                                    target: historyItem
-                                    property: "height"
-                                    to: 0
-                                    duration: 200
-                                    easing.type: Easing.InQuad
-                                }
-                            }
-                            // 执行删除
-                            ScriptAction {
-                                script: {
-                                    try {
-                                        // 向外部发出删除信号
-                                        var textField = historyPopup.parent
-                                        // control.requestRemoveHistory(modelData)
-                                        textField.requestRemoveHistory(
-                                                    modelData)
-                                    } catch (e) {
-                                        console.error("删除历史记录失败: " + e)
-                                    }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 100
                                 }
                             }
                         }
+
+                        contentItem: Text {
+                            text: "🗑️"
+                            font.pixelSize: 12
+                            color: deleteButton.hovered ? "#DC2626" : "#9CA3AF"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 100
+                                }
+                            }
+                        }
+
+                        onClicked: {
+                            if (modelData && modelData.text) {
+                                console.log("删除历史记录:", modelData.text)
+                                control.requestRemoveHistory(modelData.text)
+                                historyPopup.close()
+                            }
+                        }
+
+                        onHoveredChanged: {
+                            if (hovered) {
+                                itemBackground.color = "#FEF2F2"
+                            }
+                        }
+
+                        ToolTip.visible: hovered
+                        ToolTip.text: "删除此历史记录"
+                        ToolTip.delay: 500
                     }
-                }
 
-                // 悬停效果
-                onHoveredChanged: {
-                    highlightRect.opacity = hovered ? 0.3 : 0
-                }
+                    MouseArea {
+                        id: itemMouseArea
+                        visible: modelData && modelData.isSeparator !== true
+                        anchors.fill: parent
+                        anchors.rightMargin: (modelData
+                                              && modelData.showDelete) ? 36 : 0
+                        hoverEnabled: true
 
-                background: Rectangle {
-                    color: hovered ? "#505050" : "transparent"
-                }
+                        onClicked: {
+                            if (!modelData || !modelData.text)
+                                return
 
-                // 项的点击效果
-                onClicked: {
-                    highlightRect.opacity = 0.5
-                    var textField = historyPopup.parent
-                    textField.showingHistory = true
-                    textField.text = modelData
-                    textField.showingHistory = false
-
-                    // 发出历史项被选择的信号
-                    textField.historyItemSelected(modelData)
-
-                    // 点击动画
-                    clickAnimation.start()
-                }
-
-                SequentialAnimation {
-                    id: clickAnimation
-                    PropertyAnimation {
-                        target: historyItem
-                        property: "scale"
-                        from: 1.0
-                        to: 0.97
-                        duration: 50
-                    }
-                    PropertyAnimation {
-                        target: historyItem
-                        property: "scale"
-                        from: 0.97
-                        to: 1.0
-                        duration: 100
-                    }
-                    ScriptAction {
-                        script: {
+                            if (modelData.isCompletion) {
+                                completionItemSelected(modelData.text)
+                                control.text = modelData.text
+                            } else {
+                                historyItemSelected(modelData.text)
+                                control.text = modelData.text
+                            }
                             historyPopup.close()
                         }
+
+                        onEntered: {
+                            popupListView.currentIndex = index
+                        }
+                    }
+                }
+                // 项目进入动画 - 添加安全检查
+                Component.onCompleted: {
+                }
+            }
+
+            // 自定义滚动条保持不变
+            ScrollBar.vertical: ScrollBar {
+                width: 6
+                policy: ScrollBar.AsNeeded
+
+                background: Rectangle {
+                    color: "#F3F4F6"
+                    radius: 3
+                }
+
+                contentItem: Rectangle {
+                    radius: 3
+                    color: parent.pressed ? "#9CA3AF" : (parent.hovered ? "#D1D5DB" : "#E5E7EB")
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 100
+                        }
                     }
                 }
             }
-
-            // 滚动指示器
-            ScrollIndicator.vertical: ScrollIndicator {
-                active: historyList.contentHeight > historyList.height
-                contentItem: Rectangle {
-                    implicitWidth: 4
-                    implicitHeight: 100
-                    color: "#777777"
-                    radius: 2
-                }
-            }
-            // // 空列表显示
-            // footer: Rectangle {
-            //     width: historyList.width
-            //     height: 40
-            //     visible: historyList.count === 0
-            //     color: "transparent"
-
-            //     Text {
-            //         anchors.centerIn: parent
-            //         text: "没有匹配的历史记录"
-            //         color: "#888888"
-            //         font.pixelSize: 12
-            //         font.italic: true
-            //     }
-            // }
         }
     }
-    // 删除历史记录信号
-    signal requestRemoveHistory(string value)
 }

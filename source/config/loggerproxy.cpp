@@ -14,6 +14,7 @@ LoggerProxy::LoggerProxy(QObject *parent) : QObject(parent) {
 }
 
 LoggerProxy::~LoggerProxy() {
+  qDebug() << __FUNCTION__;
   if (m_logger) {
     delete m_logger;
     m_logger = nullptr;
@@ -56,8 +57,7 @@ void LoggerProxy::setLevel(GLOBAL::LOG_LEVEL newLevel) {
   m_level = newLevel;
   QString msg = QString("Change the Log Level, new Level is : %1")
                     .arg(GLOBAL::LOG_NAMES[newLevel]);
-  // BUG
-  // mWarning(msg, true);
+  mWarning(msg, true);
 }
 
 void LoggerProxy::setLogger(BaseLogger *newLogger) {

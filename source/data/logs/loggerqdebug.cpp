@@ -64,7 +64,6 @@ void LoggerQDebug::print(const QString &file, int line, const QString &func,
     // 使用qDebug而不是直接存文件，是为了打印QVariant类型 日志打印
     qDebug() << front.toLocal8Bit().data() << logMessage;
   }
-  // BUG 后面似乎都没有输入到日志文件中
 }
 
 void LoggerQDebug::handle(QtMsgType type, const QMessageLogContext &context,
@@ -73,6 +72,7 @@ void LoggerQDebug::handle(QtMsgType type, const QMessageLogContext &context,
   Q_UNUSED(context);
   // 调用父类静态函数提供的路径
   QFile file(filePath());
+  // qDebug() << "filePath" << filePath();
   QString key("QVariant(");
   QString message = msg;
   message.replace(msg.indexOf(key), key.size(), ""); // chop(1) 去掉末尾字符

@@ -19,7 +19,6 @@ public:
   // 获取对象数据
   QStandardItemModel *modelObjects() const;
 
-private slots:
   /**
    * @brief 设置存储桶显示(函数实现)
    * @param buckets 桶数据列表
@@ -30,6 +29,11 @@ private slots:
    * @brief 设置对象显示(函数实现)
    * @param objects 对象数据列表
    */
+
+  ///
+  /// @brief setObjects 设置对象显示
+  /// @param objects
+  ///
   void setObjects(const QList<TtObject> &objects);
 
 private:
@@ -44,6 +48,7 @@ private:
   void initObjectsTable();
 
 private:
+  // 标准模型 可以给到 qml 使用 ???
   QStandardItemModel *m_modelBuckets = nullptr; // 存储桶表格模型
   QStandardItemModel *m_modelObjects = nullptr; // 对象表格模型
 };

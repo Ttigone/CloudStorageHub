@@ -4,8 +4,6 @@ import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.Controls.Basic
 import Qt.labs.platform 1.1
-// import CloudStorageHub 1.0
-// import QtGraphicalEffects 1.15  // 添加这行用于DropShadow
 import Qt5Compat.GraphicalEffects
 import QWindowKit
 import "./Component"
@@ -13,6 +11,7 @@ import "./Component"
 Window {
     id: dialog
     property bool showWhenReady: true
+    property var loginNames: []
     color: darkStyle.windowBackgroundColor
     width: 420
     height: 580
@@ -20,22 +19,149 @@ Window {
     visible: false
     flags: Qt.Dialog
     modality: Qt.ApplicationModal
-    signal loginSuccess
 
-    // 添加属性用于存储 TDB 提供的登录名列表
-    property var loginNames: []
+    signal loginSuccess
+    signal cancelled
 
     Component.onCompleted: {
         windowAgent.setup(dialog)
         windowAgent.setWindowAttribute("dark-mode", true)
+        // 从数据库获取登录名列表
+        dialog.loginNames = ManagerGlobal.getLoginNameList()
+        // 只有用户名
+        console.log("从数据库加载了 " + loginNames.length + " 个登录名")
+
+        // ManagerGlobal.getLoginInfoByName()
         if (dialog.showWhenReady) {
             dialog.visible = true
         }
-        // 从数据库获取登录名列表
-        loginNames = TtDB.loginNameList
-        console.log("从数据库加载了 " + loginNames.length + " 个登录名")
-        if (dialog.showWhenReady) {
-            dialog.visible = true
+        // 初始化成功后, 链接信号
+        ManagerGlobal.connectLoginSignals()
+
+        ManagerGlobal.loginSuccess.connect(function () {
+            console.log("qml 接受到成功登录的信号")
+        })
+    }
+
+    // 在 Window 组件中添加信号连接
+    Connections {
+        target: ManagerGlobal
+        function onLoginSuccess() {
+            console.log("登录成功！")
+            loginButton.isLogging = false
+            loginButton.enabled = true
+            // 保存登录信息到数据库
+            ManagerGlobal.saveLoginInfo(loginName.text.trim(),
+                                        secretId.text.trim(),
+                                        secretKey.text.trim(),
+                                        backup.text.trim())
+            dialog.loginSuccess()
+            dialog.close()
+        }
+
+        function onLoginFailed(errorMessage) {
+            loginButton.isLogging = false
+            loginButton.enabled = true
+
+            console.log("登录失败")
+            notification.show(errorMessage, "warning", 2000)
+        }
+    }
+
+    // 获取登录历史列表
+    function getLoginHistory() {
+        try {
+            var nameList = ManagerGlobal.getLoginNameList()
+            console.log("获取到的登录历史:", nameList)
+            return nameList || []
+        } catch (e) {
+            console.error("获取登录历史失败:", e)
+            return []
+        }
+    }
+
+    // 根据登录名填充登录信息
+    function fillLoginInfo(name) {
+        if (!name || name.length === 0) {
+            console.warn("登录名为空，无法填充信息")
+            return
+        }
+
+        try {
+            console.log("开始填充登录信息，用户名:", name)
+            var loginInfo = ManagerGlobal.getLoginInfoByName(name)
+
+            // 能否获取到信息
+            console.log("获取到的登录信息:", JSON.stringify(loginInfo))
+
+            // 只有备足填充
+            if (loginInfo && typeof loginInfo === 'object') {
+                // 填充 Secret ID
+                if (loginInfo.secret_id) {
+                    secretId.text = loginInfo.secret_id || ""
+                    console.log("填充 Secret ID:", secretId.text)
+                }
+                // 填充 Secret Key
+                if (loginInfo.secret_key) {
+                    secretKey.text = loginInfo.secret_key || ""
+                    console.log("填充 Secret Key: [已隐藏]")
+                }
+                // 填充备注
+                if (loginInfo.remark) {
+                    backup.text = loginInfo.remark || ""
+                    console.log("填充备注:", backup.text)
+                }
+            } else {
+                console.warn("未找到用户登录信息:", name)
+                showNoDataIndicator()
+            }
+        } catch (e) {
+            console.error("填充登录信息时发生错误:", e)
+            showErrorIndicator("加载历史信息失败")
+        }
+    }
+    // 显示无数据指示器
+    function showNoDataIndicator() {
+        fillIndicator.text = "⚠ 未找到该用户的历史信息"
+        fillIndicator.color = "#FF9800"
+        fillIndicator.visible = true
+        fillIndicatorTimer.restart()
+    }
+    // 显示错误指示器
+    function showErrorIndicator(message) {
+        fillIndicator.text = "✗ " + message
+        fillIndicator.color = "#F44336"
+        fillIndicator.visible = true
+        fillIndicatorTimer.restart()
+    }
+    // 清空所有输入框
+    function clearAllFields() {
+        loginName.text = ""
+        secretId.text = ""
+        secretKey.text = ""
+        backup.text = ""
+        fillIndicator.visible = false
+    }
+
+    // 刷新登录历史
+    function refreshLoginHistory() {
+        if (loginName) {
+            loginName.historyModel = getLoginHistory()
+        }
+    }
+
+    // 自动填充延迟定时器
+    Timer {
+        id: autoFillTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (loginName.text.length > 0) {
+                var historyList = getLoginHistory()
+                if (historyList.indexOf(loginName.text) !== -1) {
+                    fillLoginInfo(loginName.text)
+                }
+            }
         }
     }
 
@@ -111,26 +237,30 @@ Window {
                 }
 
                 QWKButton {
-                    id: closeButton
+                    id: closeDialogButton
                     height: parent.height
                     source: "qrc:/resources/window-bar/close.svg"
                     background: Rectangle {
                         color: {
-                            if (!closeButton.enabled) {
+                            if (!closeDialogButton.enabled) {
                                 return "gray"
                             }
-                            if (closeButton.pressed) {
+                            if (closeDialogButton.pressed) {
                                 return "#e81123"
                             }
-                            if (closeButton.hovered) {
+                            if (closeDialogButton.hovered) {
                                 return "#e81123"
                             }
                             return "transparent"
                         }
                     }
-                    onClicked: dialog.close()
+                    onClicked: {
+                        canceled()
+                        dialog.close()
+                    }
                     Component.onCompleted: windowAgent.setSystemButton(
-                                               WindowAgent.Close, closeButton)
+                                               WindowAgent.Close,
+                                               closeDialogButton)
                 }
             }
         }
@@ -150,8 +280,6 @@ Window {
                     margins: 20
                 }
                 spacing: 8
-
-                // 标题
                 Label {
                     text: "Cloud Storage Hub"
                     font.pixelSize: 22
@@ -161,16 +289,13 @@ Window {
                     Layout.bottomMargin: 10
                     color: "#ECECEC"
                 }
-                // 登录名
                 Label {
                     text: qsTr("登录名")
                     font.pixelSize: 14
                     color: "#CCCCCC"
                     Layout.topMargin: 4
                 }
-                // TextField {
                 HistoryTextField {
-                    // BUG 登录名点击之后(从历史记录中点击 popup), 需要从 db 里面获取对应的记录, 然后显示到 ui 界面上
                     id: loginName
                     Layout.fillWidth: true
                     placeholderText: qsTr("请输入用户登录名")
@@ -186,7 +311,13 @@ Window {
                         border.width: 1
                     }
                     // 列表作为历史记录模型
-                    historyModel: dialog.loginNames
+                    // 历史记录
+                    historyModel: {
+                        // 获取是空的
+                        console.log("历史记录: ", dialog.loginNames)
+                        // return dialog.loginNames
+                        return getLoginHistory()
+                    }
                     // 连接删除历史记录信号
                     onRequestRemoveHistory: function (value) {// 删除 db 历史记录
                         // configManager.removeFromHistory(value)
@@ -194,49 +325,80 @@ Window {
                     // 修改 historyItemSelected 处理逻辑
                     onHistoryItemSelected: function (value) {
                         try {
-                            // 从 TDB 获取完整的登录信息
-                            // var loginInfo = TtDB.loginInfoByName(value)
-                            var loginInfo = TtDB.loginInfoAsMap(value)
-
-                            // 填充各个字段
-                            loginName.text = loginInfo.name
-                            secretId.text = loginInfo.secret_id
-                            secretKey.text = loginInfo.secret_key
-                            backup.text = loginInfo.remark
-
+                            // 选择无效
+                            fillLoginInfo(value)
+                            // 填充信息
                             console.log("已自动填充用户 " + value + " 的登录信息")
                         } catch (e) {
-                            console.error("获取登录信息失败: " + e)
+                            console.error("加载登录信息失败:", e)
                         }
                     }
                     // 添加文本变化处理
                     onTextChanged: {
-                        // 查找与 secretId 匹配的完整配置并自动填充 secretKey
-                        // 点击文本历史记录时, text 被填充正确的字符串, 发出一次信号
-                        if (text && configManager
-                                && configManager.findMatchingKey) {
-                            let matchedKey = configManager.findMatchingKey(text)
-                            if (matchedKey) {
-                                secretKey.text = matchedKey
-                            }
-                        }
+                        // 是这里不全的
+                        // var historyList = getLoginHistory()
+                        // if (historyList.indexOf(text) !== -1) {
+                        //     // if (loginName.text.length > 0) {
+                        //     //     var historyList1 = getLoginHistory()
+                        //     //     if (historyList1.indexOf(
+                        //     //                 loginName.text) !== -1) {
+                        //     //         fillLoginInfo(loginName.text)
+                        //     //     }
+                        //     // }
+                        //     // 延迟填充，避免在用户还在输入时干扰
+                        //     autoFillTimer.restart()
+                        // }
                     }
                 }
-                // SecretId
+                // 在登录名输入框下方添加状态指示器
+                Text {
+                    id: fillIndicator
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 20
+
+                    visible: false
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    color: "#4CAF50"
+                    text: ""
+
+                    horizontalAlignment: Text.AlignLeft
+                    verticalAlignment: Text.AlignVCenter
+
+                    // 自动隐藏定时器
+                    Timer {
+                        id: fillIndicatorTimer
+                        interval: 3000
+                        repeat: false
+                        onTriggered: {
+                            fillIndicator.visible = false
+                        }
+                    }
+
+                    // 淡入淡出动画
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    opacity: visible ? 1.0 : 0.0
+                }
                 Label {
                     text: qsTr("SecretId")
                     font.pixelSize: 14
                     color: "#CCCCCC"
                 }
-                // HistoryTextField {
                 TextField {
                     id: secretId
                     Layout.fillWidth: true
                     placeholderText: qsTr("请输入 API ID")
                     height: 40
                     selectByMouse: true
-                    echoMode: TextInput.Password
+                    echoMode: TextInput.Normal
                     color: "#FFFFFF"
+                    text: ""
                     placeholderTextColor: "#8A8A8A" // 更亮的灰色，提高对比度
                     background: Rectangle {
                         radius: 4
@@ -261,6 +423,7 @@ Window {
                     echoMode: TextInput.Password
                     color: "#FFFFFF"
                     placeholderTextColor: "#8A8A8A" // 更亮的灰色，提高对比度
+                    text: ""
                     background: Rectangle {
                         radius: 4
                         color: "#3E3E42"
@@ -335,37 +498,60 @@ Window {
                     Layout.topMargin: 8
                     Layout.preferredHeight: 40
 
+                    property bool isLogging: false
+
                     palette {
                         button: "#2980b9"
                         buttonText: "white"
                     }
-
                     font.pixelSize: 16
 
-                    onClicked: {
-                        // BUG 执行登录网关配置
+                    // 登录状态指示器
+                    BusyIndicator {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        height: 20
+                        visible: loginButton.isLogging
+                        running: loginButton.isLogging
+                    }
 
-                        // BUG 数据库操作
-                        // TDB
-                        // 保存到数据库
-                        TtDB.saveLoginInfo(loginName.text, // 登录名
-                                           secretId.text, // SecretId
-                                           secretKey.text, // SecretKey
-                                           backup.text // 备注
-                                           )
-                        // 保存配置
-                        // configManager.secretId = secretId.text
-                        // configManager.secretKey = secretKey.text
-                        // console.log("保存 key: ", configManager.secretKey)
-                        // configManager.remark = backup.text
-                        // configManager.rememberSession = rememberSession.checked
-                        // configManager.saveLoginConfig()
-                        // 发出信号
-                        loginSuccess()
-                        dialog.close()
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (secretId.text.trim() === "") {
+                                // console.error("SecretId不能为空")
+                                // toastNotification.showToast("SecretId 不能为空")
+                                notification.show("SecretId 不能为空")
+                                return
+                            }
+                            if (secretKey.text.trim() === "") {
+                                // console.error("SecretKey不能为空")
+                                // toastNotification.showToast("SecretKey 不能为空")
+                                notification.show("SecretKey 不能为空")
+                                return
+                            }
+                            // 禁用按钮防止重复点击
+                            loginButton.isLogging = true
+                            loginButton.enabled = false
+
+                            console.log("正在尝试登录:")
+                            // 在 LoginDialog.qml 的登录按钮 onClicked 中
+                            ManagerGlobal.login(secretId.text, secretKey.text,
+                                                loginName.text
+                                                || secretId.text, backup.text)
+                            // 保存配置
+                            // configManager.secretId = secretId.text
+                            // configManager.secretKey = secretKey.text
+                            // console.log("保存 key: ", configManager.secretKey)
+                            // configManager.remark = backup.text
+                            // configManager.rememberSession = rememberSession.checked
+                            // configManager.saveLoginConfig()
+                        }
                     }
                 }
-
                 // 填充空间
                 Item {
                     Layout.fillHeight: true
@@ -386,6 +572,17 @@ Window {
                     Layout.preferredHeight: implicitHeight // 添加这行确保高度计算正确
                     Layout.minimumHeight: implicitHeight // 添加这行确保至少有文本需要的高度
                 }
+            }
+        }
+        TtNotification {
+            id: notification
+            anchors.fill: parent
+            onClicked: {
+                console.log("通知被点击")
+            }
+
+            onClosed: {
+                console.log("通知已关闭")
             }
         }
     }

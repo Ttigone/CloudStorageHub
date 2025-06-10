@@ -4,134 +4,62 @@
 #include "middle/signals/managersignals.h"
 #include "plugin/TtPlugin.h"
 
-// ManagerCloud::ManagerCloud(QObject *parent) : QObject(parent) {}
-
-// ManagerCloud::~ManagerCloud() {}
-
-// void ManagerCloud::login(std::string secretId, std::string secretKey) {
-//   QList<TtBucket> buckets = MG->mPlugin->clouds()->login(
-//       secretId.toStdString(), secretKey.toStdString());
-
-//   // 发送登录信号
-//   emit MG->mSignal->loginSuccess();
-//   bucketsAlready(buckets);
-// }
-
-// void ManagerCloud::getBuckets() {
-//   QList<TtBucket> buckets = MG->mPlugin->clouds()->buckets();
-//   bucketsAlready(buckets);
-// }
-
-// void ManagerCloud::putBucket(const std::string &bucketName,
-//                              const std::string &location) {
-//   MG->mPlugin->clouds()->putBucket(bucketName, location);
-//   getBuckets(); // 更新本地存储桶展示
-// }
-
-// void ManagerCloud::deleteBucket(const std::string &bucketName) {
-//   MG->mPlugin->clouds()->deleteBucket(bucketName);
-//   emit MG->mSignal->deleteBucketSuccess(bucketName); // 成功删除桶
-//   getBuckets();                                      // 刷新桶页面
-// }
-
-// void ManagerCloud::getObjects(const std::string &bucketName, const
-// std::string &dir)
-// {
-//   QList<TtObject> objs = MG->mPlugin->clouds()->getObjects(bucketName, dir);
-//   m_currentBucketName = bucketName;
-//   m_currentDir = dir;
-//   emit MG->mSignal->objectsSuccess(objs);
-// }
-
-// void ManagerCloud::getObject(const std::string &jobId, const std::string
-// &bucketName,
-//                              const std::string &key, const std::string
-//                              &localPath) {
-//   // transferred_size 已经传送的大小，total_size 需要传输的总大小
-//   auto callback = [=](qulonglong transferred_size, qulonglong total_size,
-//                       void *) {
-//     assert(transferred_size <= total_size);
-//     if (0 == transferred_size % (1024 * 512)) {
-//       emit MG->mSignal->downloadProcess(jobId, transferred_size, total_size);
-//     }
-//   };
-//   MG->mPlugin->clouds()->getObject(bucketName, key, localPath, callback);
-//   emit MG->mSignal->downloadSuccess(jobId);
-// }
-
-// void ManagerCloud::putObject(const std::string &jobId, const std::string
-// &bucketName,
-//                              const std::string &key, const std::string
-//                              &localPath) {
-//   auto callback = [=](qulonglong transferred_size, qulonglong total_size,
-//                       void *) {
-//     assert(transferred_size <= total_size);
-//     if (0 == transferred_size % (1024 * 512)) {
-//       emit MG->mSignal->uploadProcess(jobId, transferred_size, total_size);
-//     }
-//   };
-//   MG->mPlugin->clouds()->putObject(bucketName, key, localPath, callback);
-//   emit MG->mSignal->uploadSuccess(jobId);
-// }
-
-// std::string ManagerCloud::currentBucketName() const { return
-// m_currentBucketName;
-// }
-
-// std::string ManagerCloud::currentDir() const { return m_currentDir; }
-
-// void ManagerCloud::bucketsAlready(const QList<TtBucket> &buckets) {
-//   m_currentBucketName.clear();
-//   m_currentDir.clear();
-//   emit MG->mSignal->bucketsSuccess(buckets);
-// }
-
 ManagerCloud::ManagerCloud(QObject *parent) : QObject(parent) {}
 
-ManagerCloud::~ManagerCloud() {}
+ManagerCloud::~ManagerCloud() { qDebug() << __FUNCTION__; }
 
 void ManagerCloud::login(const std::string &secretId,
                          const std::string &secretKey) {
-  // QList<TtBucket> buckets = MG->mPlugin->clouds()->login(
-  //     secretId.toStdString(), secretKey.toStdString());
-  QList<TtBucket> buckets = MG->mPlugin->clouds()->login(secretId, secretKey);
-
-  // 发送登录信号
-  emit MG->mSignal->loginSuccess();
+  // 对应插件去执行登录操作
+  QList<TtBucket> buckets =
+      ManGLOBAL->mPlugin->clouds()->login(secretId, secretKey);
+  // 上面登录失败将会抛出异常, 下面的语句
+  qDebug() << "发射成功登录信号";
+  emit ManGLOBAL->mSignal->loginSuccess();
+  // 将桶数据传递给信号
   bucketsAlready(buckets);
 }
 
 void ManagerCloud::getBuckets() {
-  QList<TtBucket> buckets = MG->mPlugin->clouds()->buckets();
+  QList<TtBucket> buckets = ManGLOBAL->mPlugin->clouds()->buckets();
   bucketsAlready(buckets);
 }
 
 void ManagerCloud::putBucket(const std::string &bucketName,
                              const std::string &location) {
-  MG->mPlugin->clouds()->putBucket(bucketName, location);
+  ManGLOBAL->mPlugin->clouds()->putBucket(bucketName, location);
   getBuckets(); // 更新本地存储桶展示
 }
 
 void ManagerCloud::deleteBucket(const std::string &bucketName) {
-  MG->mPlugin->clouds()->deleteBucket(bucketName);
+  ManGLOBAL->mPlugin->clouds()->deleteBucket(bucketName);
   // 成功删除桶
-  emit MG->mSignal->deleteBucketSuccess(bucketName);
+  emit ManGLOBAL->mSignal->deleteBucketSuccess(bucketName);
   // 刷新桶页面
   getBuckets();
 }
 
 void ManagerCloud::getObjects(const std::string &bucketName,
                               const std::string &dir) {
-  QList<TtObject> objs = MG->mPlugin->clouds()->getObjects(bucketName, dir);
+  QList<TtObject> objs =
+      ManGLOBAL->mPlugin->clouds()->getObjects(bucketName, dir);
+  // 保存桶名
   m_currentBucketName = bucketName;
+  // 当前文件夹的名字, 带有 "/" 结尾
   m_currentDir = dir;
-  emit MG->mSignal->objectsSuccess(objs);
+  // 发射信号
+  emit ManGLOBAL->mSignal->objectsSuccess(objs);
+  // return objs;
 }
 
 void ManagerCloud::getObject(const std::string &jobId,
                              const std::string &bucketName,
                              const std::string &key,
                              const std::string &localPath) {
+  // 执行的是这个
+  qDebug() << "获取对象名";
+  // 没有 key 值
+  // qDebug() << jobId << bucketName << key << localPath;
   // transferred_size 已经传送的大小，total_size 需要传输的总大小
   // 回调函数
   auto callback = [=](qulonglong transferred_size, qulonglong total_size,
@@ -139,14 +67,16 @@ void ManagerCloud::getObject(const std::string &jobId,
     // 断言, 确保没有传输未知字节数
     assert(transferred_size <= total_size);
     if (0 == transferred_size % (1024 * 512)) {
-      // 512KB 为一个分块
-      emit MG->mSignal->downloadProcess(jobId, transferred_size, total_size);
+      // 大于 512KB 为一个分块
+      emit ManGLOBAL->mSignal->downloadProcess(jobId, transferred_size,
+                                               total_size);
     }
   };
+  // 这里会丢失一些传输对象
   // 获取云对象
-  MG->mPlugin->clouds()->getObject(bucketName, key, localPath, callback);
-  // 发出成功下载的信号
-  emit MG->mSignal->downloadSuccess(jobId);
+  ManGLOBAL->mPlugin->clouds()->getObject(bucketName, key, localPath, callback);
+  // // 成功下载, 为什么会先发出信号
+  emit ManGLOBAL->mSignal->downloadSuccess(jobId);
 }
 
 void ManagerCloud::putObject(const std::string &jobId,
@@ -157,11 +87,25 @@ void ManagerCloud::putObject(const std::string &jobId,
                       void *) {
     assert(transferred_size <= total_size);
     if (0 == transferred_size % (1024 * 512)) {
-      emit MG->mSignal->uploadProcess(jobId, transferred_size, total_size);
+      emit ManGLOBAL->mSignal->uploadProcess(jobId, transferred_size,
+                                             total_size);
     }
   };
-  MG->mPlugin->clouds()->putObject(bucketName, key, localPath, callback);
-  emit MG->mSignal->uploadSuccess(jobId);
+
+  // 路径的问题
+  std::string localPathtest = "F:/MyProject/CloudStorageHub/"
+                              "build-CloudStorageHub-Desktop_Qt_6_6_3_MSVC2019_"
+                              "64bit-Release/CMakeCache.txt.prev";
+  ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPathtest,
+                                          callback);
+  emit ManGLOBAL->mSignal->uploadSuccess(jobId);
+}
+
+void ManagerCloud::deleteObject(const std::string &bucketName,
+                                const std::string &key) {
+  ManGLOBAL->mPlugin->clouds()->deleteObject(bucketName, key);
+  qDebug() << "发出删除对象的信号";
+  emit ManGLOBAL->mSignal->deleteObjectSuccess(bucketName, key);
 }
 
 std::string ManagerCloud::currentBucketName() const {
@@ -173,5 +117,5 @@ std::string ManagerCloud::currentDir() const { return m_currentDir; }
 void ManagerCloud::bucketsAlready(const QList<TtBucket> &buckets) {
   m_currentBucketName.clear();
   m_currentDir.clear();
-  emit MG->mSignal->bucketsSuccess(buckets);
+  emit ManGLOBAL->mSignal->bucketsSuccess(buckets);
 }

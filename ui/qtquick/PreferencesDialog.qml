@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Qt5Compat.GraphicalEffects
+import QtQuick.Dialogs
 
 import "./Component"
 
@@ -34,9 +35,9 @@ Window {
     property string language: "简体中文"
 
     // 覆盖窗口关闭事件
-    onClosing: function(close) {
+    onClosing: function (close) {
         if (hasUnsavedChanges) {
-            close.accepted = false  // 阻止默认关闭行为
+            close.accepted = false // 阻止默认关闭行为
             unsavedChangesDialog.open()
         }
     }
@@ -66,37 +67,8 @@ Window {
                 Item {
                     Layout.fillWidth: true
                 }
-                // Button {
-                //     text: "×"
-                //     flat: true
-                //     font.pixelSize: 20
-
-                //     contentItem: Text {
-                //         text: parent.text
-                //         font: parent.font
-                //         color: "#FFFFFF"
-                //         horizontalAlignment: Text.AlignHCenter
-                //         verticalAlignment: Text.AlignVCenter
-                //     }
-
-                //     background: Rectangle {
-                //         color: parent.hovered ? "#3A546A" : "transparent"
-                //         radius: 4
-                //     }
-
-                //     onClicked: {
-                //         if (hasUnsavedChanges) {
-                //             unsavedChangesDialog.open()
-                //         } else {
-                //             preferencesDialog.close()
-                //         }
-                //     }
-                // }
             }
         }
-
-        // 内容区
-        // SplitView {
         TtSplitView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -338,7 +310,6 @@ Window {
                             Layout.fillWidth: true
                             color: "#E0E0E0"
                         }
-
                         // 下载路径设置
                         ColumnLayout {
                             spacing: 8
@@ -354,22 +325,34 @@ Window {
                                     id: downloadPathField
                                     Layout.preferredWidth: 350
                                     text: preferencesDialog.downloadPath
-                                          || qsTr("未设置")
+                                          || getDefaultDownloadDirectory()
                                     readOnly: true
+                                    Component.onCompleted: {
+                                        if (typeof ManagerGlobal.getDownloadDirectory
+                                                === "function") {
+                                            let currentPath = ManagerGlobal.getDownloadDirectory()
+                                            if (currentPath
+                                                    && currentPath !== "") {
+                                                text = currentPath
+                                                preferencesDialog.downloadPath = currentPath
+                                            }
+                                        }
+                                    }
                                 }
-
                                 Button {
                                     text: qsTr("浏览...")
                                     onClicked: {
-                                        // 在实际应用中，这里会打开文件对话框
-                                        console.log("选择下载路径")
-                                        preferencesDialog.hasUnsavedChanges = true
-                                        preferencesDialog.downloadPath
-                                                = "/Users/Documents/Downloads"
-                                        downloadPathField.text = preferencesDialog.downloadPath
+                                        folderDialog.currentFolder = downloadPathField.text
+                                        folderDialog.open()
                                     }
                                 }
-                            } 
+                            }
+                            Text {
+                                text: qsTr("提示: 更改下载路径将影响新的下载任务")
+                                font.pixelSize: 11
+                                color: "#9CA3AF"
+                                Layout.topMargin: 4
+                            }
                         }
 
                         // 缓存管理
@@ -402,6 +385,19 @@ Window {
                     }
 
                     ScrollView {
+                        hoverEnabled: true
+                        // 使用自定义滚动条
+                        // contentHeight: 200
+                        // contentWidth: 500
+                        // ScrollBar.vertical: TtScrollBar {
+                        //     parent: tableScrollView
+                        // }
+
+                        // ScrollBar.horizontal: TtScrollBar {
+                        //     parent: tableScrollView
+                        //     orientation: Qt.Horizontal
+                        // }
+
                         // 4. 网络设置页
                         ColumnLayout {
                             spacing: 20
@@ -765,5 +761,38 @@ Window {
         languageCombo.currentIndex = 0
 
         hasUnsavedChanges = true
+    }
+
+    FolderDialog {
+        id: folderDialog
+        title: qsTr("选择下载保存位置")
+        // currentFolder:
+        onAccepted: {
+            let selectedPath = folderDialog.selectedFolder.toString()
+            // 移除 file:// 前缀
+            if (selectedPath.startsWith("file://")) {
+                selectedPath = selectedPath.substring(7)
+
+                // 在 Windows 上去掉第一个斜杠
+                if (Qt.platform.os === "windows"
+                        && selectedPath.startsWith("/")) {
+                    selectedPath = selectedPath.substring(1)
+                }
+            }
+
+            downloadPathField.text = selectedPath
+            preferencesDialog.downloadPath = selectedPath
+            preferencesDialog.hasUnsavedChanges = true
+
+            console.log("选择了下载目录:", selectedPath)
+        }
+    }
+
+    // 添加获取默认下载路径的函数
+    function getDefaultDownloadPath() {
+        if (typeof ManagerGlobal.getDefaultDownloadDirectory === "function") {
+            return ManagerGlobal.getDefaultDownloadDirectory()
+        }
+        return "./downloads"
     }
 }
