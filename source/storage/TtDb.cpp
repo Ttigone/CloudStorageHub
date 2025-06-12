@@ -7,12 +7,27 @@ TtDB::~TtDB() { qDebug() << __FUNCTION__; }
 
 void TtDB::init()
 {
-    // BUG 数据库是链接的, 但是没有数据库文件
-    qDebug() << "connected";
-    m_loginInfo.connect();
-    m_loginInfo.createTable();
-    // 初始时查询数据库数据
-    m_loginInfoList = m_loginInfo.select();
+    // // BUG 数据库是链接的, 但是没有数据库文件
+    // qDebug() << "connected";
+    // m_loginInfo.connect();
+    // // 链接
+    // m_loginInfo.createTable();
+    // // 初始时查询数据库数据
+    // m_loginInfoList = m_loginInfo.select();
+        try {
+        m_loginInfo.connect();
+        qDebug() << "数据库连接成功";
+        
+        m_loginInfo.createTable();
+        qDebug() << "数据表创建成功";
+        
+        // 初始时查询数据库数据
+        m_loginInfoList = m_loginInfo.select();
+        qDebug() << "初始数据加载成功，记录数：" << m_loginInfoList.size();
+    } catch (const QString &error) {
+        qCritical() << "数据库初始化失败：" << error;
+        throw;
+    }
 }
 
 void TtDB::saveLoginInfo(const QString& name, const QString& id,

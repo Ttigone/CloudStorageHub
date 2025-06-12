@@ -6,6 +6,7 @@
 
 #include "middle/models/paginationproxymodel.h"
 #include "storage/TtDb.h"
+#include "storage/historymanager.h"
 
 // 写入日志宏
 #define ManGLOBAL ManagerGlobal::instance()
@@ -42,6 +43,7 @@ public:
   static ManagerGlobal *instance();
 
   void init(int argc, char *argv[]);
+
   ///
   /// @brief connectLoginSignals 初始化链接信号槽
   ///
@@ -196,6 +198,21 @@ public:
 
   Q_INVOKABLE void deleteFile(const QString &bucketName, const QString &key);
 
+  // 添加历史记录管理器的访问方法
+  Q_INVOKABLE HistoryManager *getHistoryManager() const;
+
+Q_INVOKABLE void handleDownloadCompleted(const QString &jobId, const QString &fileName,
+                                          const QString &bucketName, const QString &objectKey,
+                                          const QString &localPath, qint64 fileSize, bool success);
+  
+  Q_INVOKABLE void handleUploadCompleted(const QString &jobId, const QString &fileName,
+                                        const QString &bucketName, const QString &remotePath,
+                                        const QString &localPath, qint64 fileSize, bool success);
+                                        void saveCompletedDownloadToHistory(const QString &jobId);
+
+void saveCompletedUploadToHistory(const QString &jobId);
+
+
 signals:
   // 提供给 QML 使用
   void loginSuccess();
@@ -205,6 +222,15 @@ signals:
   // 上传相关信号
   void uploadProgressUpdated(const QString &jobId, double progress);
   void deleteObjectSuccess(const QString &bucketName, const QString &key);
+
+  // 传输完成信号
+  void downloadCompleted(const QString &jobId, const QString &fileName, 
+                        const QString &bucketName, const QString &objectKey, 
+                        const QString &localPath, qint64 fileSize, bool success);
+  void uploadCompleted(const QString &jobId, const QString &fileName,
+                      const QString &bucketName, const QString &remotePath,
+                      const QString &localPath, qint64 fileSize, bool success);
+
 
 public:
   LoggerProxy *mLog{nullptr};
@@ -216,9 +242,19 @@ public:
   ManagerModels *mModels{nullptr};
 
 private:
-  PaginationProxyModel *m_bucketsPaginationModel{nullptr};
-  PaginationProxyModel *m_objectsPaginationModel{nullptr};
-  bool m_isFirstLoadBucketModel{false};
+  // 内部使用的历史记录保存方法
+  void saveDownloadToHistory(const QString &jobId, const QString &fileName,
+                            const QString &bucketName, const QString &objectKey,
+                            const QString &localPath, qint64 fileSize);
+  
+  void saveUploadToHistory(const QString &jobId, const QString &fileName,
+                          const QString &bucketName, const QString &remotePath,
+                          const QString &localPath, qint64 fileSize);
+  // PaginationProxyModel *m_bucketsPaginationModel{nullptr};
+  // PaginationProxyModel *m_objectsPaginationModel{nullptr};
+  // bool m_isFirstLoadBucketModel{false};
+
+  HistoryManager *m_historyManager{nullptr};
 };
 
 #endif // MANGLOBAL_H

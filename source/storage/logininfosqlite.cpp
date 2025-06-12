@@ -64,11 +64,13 @@ QList<LoginInfo> LoginInfoSqlite::select() {
 }
 
 void LoginInfoSqlite::connect() {
+  // 链接
   // qDebug() << GLOBAL::SQLITE::NAME;
   m_db.connect(GLOBAL::SQLITE::NAME);
 }
 
 void LoginInfoSqlite::createTable() {
+  // 创建表的语句, 写到了一个 sql 文件
   QString sql = FileHelper::readAllTxt(GLOBAL::SQL::LOGIN_INFO_TABLE);
   m_db.exec(sql);
 }

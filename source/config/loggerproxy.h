@@ -106,7 +106,6 @@ private:
   void doLog(GLOBAL::LOG_LEVEL level, const QVariant &var, bool up) const;
 
 private:
-  // BasicLogger *m_logger = nullptr;
   BaseLogger *m_logger = nullptr;
   GLOBAL::LOG_LEVEL m_level;
   QString m_file; // 日志发生的文件

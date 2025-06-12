@@ -29,7 +29,8 @@ Q_DECLARE_METATYPE(TtBucket)
 class TtObject : public BaseObject {
 public:
   bool isDir() const {
-    qDebug() << name << isValid() << name.endsWith("/");
+    // 此处会判断 2 次, 为什么
+    // qDebug() << "isDia" << name << isValid() << name.endsWith("/");
     return isValid() && name.endsWith("/");
   }
   bool isFile() const { return isValid() && !name.endsWith("/"); }

@@ -42,12 +42,12 @@ void ManagerGlobal::init(int argc, char *argv[]) {
   mModels = new ManagerModels(this);
 
   // 创建分页代理模型并连接到桶模型
-  m_bucketsPaginationModel = new PaginationProxyModel(this);
-  m_bucketsPaginationModel->setSourceModel(getBucketsModel());
+  // m_bucketsPaginationModel = new PaginationProxyModel(this);
+  // m_bucketsPaginationModel->setSourceModel(getBucketsModel());
 
-  // 创建分页代理模型并连接到对象模型
-  m_objectsPaginationModel = new PaginationProxyModel(this);
-  m_objectsPaginationModel->setSourceModel(getObjectsModel());
+  // // 创建分页代理模型并连接到对象模型
+  // m_objectsPaginationModel = new PaginationProxyModel(this);
+  // m_objectsPaginationModel->setSourceModel(getObjectsModel());
 
   // 创建临时目录和日志目录 C:/Users/xxxx/AppData/Local/Temp/qos/logs
   FileHelper::mkPath(GLOBAL::PATH::LOG_DIR);
@@ -66,6 +66,14 @@ void ManagerGlobal::init(int argc, char *argv[]) {
   // 链接信号 ???
 
   mDb->init();
+
+  m_historyManager = new HistoryManager(this);
+  // 初始化历史记录数据库
+  if (m_historyManager) {
+    if (!m_historyManager->initDatabase()) {
+      qWarning() << "历史记录数据库初始化失败";
+    }
+  }
 }
 
 void ManagerGlobal::login(const QString &secretId, const QString &secretKey,
@@ -140,6 +148,15 @@ void ManagerGlobal::connectLoginSignals() {
           [this](const std::string &jobId) {
             emit downloadProgressUpdated(QString(jobId.c_str()), 1.0);
             qDebug() << "任务下载完成: " << jobId;
+
+            // 保存到历史记录
+            if (m_historyManager) {
+              saveCompletedDownloadToHistory(QString::fromStdString(jobId));
+            }
+
+            // 发出QML信号
+            emit downloadCompleted(QString::fromStdString(jobId), "", "", "",
+                                   "", 0, true);
           });
   connect(mSignal, &ManagerSignals::uploadProcess, this,
           [this](const std::string &jobId, qulonglong transferred,
@@ -151,19 +168,18 @@ void ManagerGlobal::connectLoginSignals() {
           [this](const std::string &jobId) {
             emit uploadProgressUpdated(QString::fromStdString(jobId), 1.0);
             qDebug() << "任务上传完成: " << QString::fromStdString(jobId);
-            // emit uploadSuccess(QString::fromStdString(jobId));
-            // if (mCloud) {
-            //   auto bucketName = mCloud->currentBucketName();
-            //   auto currentDir = mCloud->currentDir();
-            //   if (!bucketName.empty()) {
-            //     refreshObjects(QString::fromStdString(bucketName),
-            //                    QString::fromStdString(currentDir));
-            //   }
-            // }
+            // 保存到历史记录
+            if (m_historyManager) {
+              saveCompletedUploadToHistory(QString::fromStdString(jobId));
+            }
+            // 发出QML信号
+            emit uploadCompleted(QString::fromStdString(jobId), "", "", "", "",
+                                 0, true);
           });
   connect(mSignal, &ManagerSignals::deleteObjectSuccess, this,
           [this](const std::string bucket, const std::string &key) {
-
+            emit deleteObjectSuccess(QString::fromStdString(bucket),
+                                     QString::fromStdString(key));
           });
 }
 
@@ -384,5 +400,162 @@ void ManagerGlobal::deleteFile(const QString &bucketName, const QString &key) {
     mGate->send(API::OBJECTS::DELOBJECT, params);
   } catch (const std::exception &e) {
     mError(QString("删除文件失败: %1").arg(e.what()));
+  }
+}
+
+HistoryManager *ManagerGlobal::getHistoryManager() const {
+  return m_historyManager;
+}
+
+void ManagerGlobal::handleDownloadCompleted(const QString &jobId,
+                                            const QString &fileName,
+                                            const QString &bucketName,
+                                            const QString &objectKey,
+                                            const QString &localPath,
+                                            qint64 fileSize, bool success) {
+  qDebug() << "处理下载完成:" << jobId << fileName << "成功:" << success;
+
+  if (success) {
+    // 保存到历史记录
+    saveDownloadToHistory(jobId, fileName, bucketName, objectKey, localPath,
+                          fileSize);
+  }
+
+  // 发出完成信号
+  emit downloadCompleted(jobId, fileName, bucketName, objectKey, localPath,
+                         fileSize, success);
+}
+
+// 🔥 新增：处理上传完成
+void ManagerGlobal::handleUploadCompleted(const QString &jobId,
+                                          const QString &fileName,
+                                          const QString &bucketName,
+                                          const QString &remotePath,
+                                          const QString &localPath,
+                                          qint64 fileSize, bool success) {
+  qDebug() << "处理上传完成:" << jobId << fileName << "成功:" << success;
+
+  if (success) {
+    // 保存到历史记录
+    saveUploadToHistory(jobId, fileName, bucketName, remotePath, localPath,
+                        fileSize);
+  }
+
+  // 发出完成信号
+  emit uploadCompleted(jobId, fileName, bucketName, remotePath, localPath,
+                       fileSize, success);
+}
+
+// 🔥 新增：保存已完成的下载任务到历史记录
+void ManagerGlobal::saveCompletedDownloadToHistory(const QString &jobId) {
+  qDebug() << "💾 保存下载历史记录:" << jobId;
+
+  // 这里需要从某个地方获取下载任务的详细信息
+  // 你可能需要在下载管理器中维护一个任务信息映射
+
+  QVariantMap record;
+  record["jobId"] = jobId;
+  record["fileName"] = "downloaded_file.txt"; // 🔥 这里需要从实际下载任务中获取
+  record["fileSize"] = 1024; // 🔥 这里需要从实际下载任务中获取
+  record["bucketName"] = "test-bucket"; // 🔥 这里需要从实际下载任务中获取
+  record["objectKey"] = "test/file.txt"; // 🔥 这里需要从实际下载任务中获取
+  record["localPath"] =
+      "/local/path/file.txt"; // 🔥 这里需要从实际下载任务中获取
+  record["status"] = "已完成";
+  record["startTime"] = QDateTime::currentMSecsSinceEpoch();
+  record["completedTime"] = QDateTime::currentMSecsSinceEpoch();
+
+  try {
+    if (m_historyManager->addDownloadRecord(record)) {
+      qDebug() << "✅ 下载历史保存成功:" << record.value("fileName").toString();
+    }
+  } catch (const QString &error) {
+    qWarning() << "❌ 保存下载历史失败:" << error;
+  }
+}
+void ManagerGlobal::saveCompletedUploadToHistory(const QString &jobId) {
+  qDebug() << "💾 保存上传历史记录:" << jobId;
+
+  QVariantMap record;
+  record["jobId"] = jobId;
+  record["fileName"] = "uploaded_file.txt"; // 🔥 这里需要从实际上传任务中获取
+  record["fileSize"] = 1024; // 🔥 这里需要从实际上传任务中获取
+  record["bucketName"] = "test-bucket"; // 🔥 这里需要从实际上传任务中获取
+  record["remotePath"] = "test/file.txt"; // 🔥 这里需要从实际上传任务中获取
+  record["localPath"] =
+      "/local/path/file.txt"; // 🔥 这里需要从实际上传任务中获取
+  record["status"] = "已完成";
+  record["startTime"] = QDateTime::currentMSecsSinceEpoch();
+  record["completedTime"] = QDateTime::currentMSecsSinceEpoch();
+
+  try {
+    if (m_historyManager->addUploadRecord(record)) {
+      qDebug() << "✅ 上传历史保存成功:" << record.value("fileName").toString();
+    }
+  } catch (const QString &error) {
+    qWarning() << "❌ 保存上传历史失败:" << error;
+  }
+}
+
+void ManagerGlobal::saveDownloadToHistory(
+    const QString &jobId, const QString &fileName, const QString &bucketName,
+    const QString &objectKey, const QString &localPath, qint64 fileSize) {
+  if (!m_historyManager) {
+    qWarning() << "历史记录管理器未初始化";
+    return;
+  }
+
+  QVariantMap record;
+  record["jobId"] = jobId;
+  record["fileName"] = fileName;
+  record["fileSize"] = fileSize;
+  record["bucketName"] = bucketName;
+  record["objectKey"] = objectKey;
+  record["localPath"] = localPath;
+  record["status"] = "已完成";
+  record["startTime"] = QDateTime::
+      currentMSecsSinceEpoch(); // 这里可以从任务信息中获取实际开始时间
+  record["completedTime"] = QDateTime::currentMSecsSinceEpoch();
+
+  try {
+    if (m_historyManager->addDownloadRecord(record)) {
+      qDebug() << "✅ 下载历史保存成功:" << fileName;
+    } else {
+      qWarning() << "❌ 下载历史保存失败:" << fileName;
+    }
+  } catch (const QString &error) {
+    qWarning() << "❌ 保存下载历史时发生错误:" << error;
+  }
+}
+
+// 🔥 新增：保存上传历史
+void ManagerGlobal::saveUploadToHistory(
+    const QString &jobId, const QString &fileName, const QString &bucketName,
+    const QString &remotePath, const QString &localPath, qint64 fileSize) {
+  if (!m_historyManager) {
+    qWarning() << "历史记录管理器未初始化";
+    return;
+  }
+
+  QVariantMap record;
+  record["jobId"] = jobId;
+  record["fileName"] = fileName;
+  record["fileSize"] = fileSize;
+  record["bucketName"] = bucketName;
+  record["remotePath"] = remotePath;
+  record["localPath"] = localPath;
+  record["status"] = "已完成";
+  record["startTime"] = QDateTime::
+      currentMSecsSinceEpoch(); // 这里可以从任务信息中获取实际开始时间
+  record["completedTime"] = QDateTime::currentMSecsSinceEpoch();
+
+  try {
+    if (m_historyManager->addUploadRecord(record)) {
+      qDebug() << "✅ 上传历史保存成功:" << fileName;
+    } else {
+      qWarning() << "❌ 上传历史保存失败:" << fileName;
+    }
+  } catch (const QString &error) {
+    qWarning() << "❌ 保存上传历史时发生错误:" << error;
   }
 }

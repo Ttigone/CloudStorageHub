@@ -199,6 +199,7 @@ QList<TtObject> CloudsTC::getObjects(const std::string &bucketName,
   }
   // 获取该桶层级下的所有文件夹和文件对象
   // dir 是 测试文件/
+  // 执行第一次
   qDebug() << "dir" << dir;
   return getDirList(resp, dir) + getFileList(resp, dir);
 }

@@ -226,19 +226,20 @@ Rectangle {
             // 添加调试属性
             property bool debugMode: true
 
+            // 为什么也会执行 2 次
             // 当模型变化时的处理
             onModelChanged: {
                 if (debugMode) {
-                    console.log("ListView 模型变化:",
-                                model ? JSON.stringify(model) : "null")
-                    console.log("ListView 项目数量:", count)
+                    // console.log("ListView 模型变化:",
+                    //             model ? JSON.stringify(model) : "null")
+                    // console.log("ListView 项目数量:", count)
                 }
             }
 
             onCountChanged: {
-                if (debugMode) {
-                    console.log("ListView 项目数量变化:", count)
-                }
+                // if (debugMode) {
+                //     console.log("ListView 项目数量变化:", count)
+                // }
                 positionViewAtEnd()
             }
 

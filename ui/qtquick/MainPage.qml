@@ -13,8 +13,7 @@ import "./Component"
 Item {
     id: rootItem
     anchors.fill: parent
-    // property var columnWidths: [300, 150, 150] // 名称、大小、日期
-    property var columnWidths: [300, 150, 150, 100] // 名称、大小、日期
+    property var columnWidths: [300, 150, 150, 100] // 名称、大小、日期、操作按钮区
     property int currentPerPage: 20
     property ListModel downloadModel: ListModel {}
     // 在properties区域添加代理模型实例
@@ -952,11 +951,12 @@ Item {
                     Layout.preferredHeight: 36
                     enableCompletion: true
 
-                    // 设置文字颜色
                     color: "#FFFFFF" // 白色文字
 
+                    showHistoryButton: false
+                    showClearButton: true
+
                     background: Rectangle {
-                        // color: "#333333"
                         color: "#404040" // 深灰色背景
                         opacity: 0.9
                         radius: 4
@@ -970,6 +970,7 @@ Item {
                             border.width: 1
                         }
                     }
+
                     Label {
                         visible: !searchField.text && !searchField.activeFocus
                         anchors {
@@ -980,57 +981,34 @@ Item {
                         text: "搜索桶..."
                         color: "#999999"
                     }
+
                     onAccepted: {
                         if (text.length > 0) {
                             searchRequested(text)
                         }
                     }
-                    // 新增：处理补全项选择
+
+                    // 处理补全项选择
                     onCompletionItemSelected: function (value) {
                         console.log("选择了补全项:", value)
-                        // 可以直接触发搜索或其他操作
                         searchRequested(value)
                     }
 
                     onHistoryItemSelected: function (value) {
                         console.log("选择了历史记录:", value)
                         searchRequested(value)
-                        // 选择对应桶对象表格
-                        // 尝试选择对应的桶
-                        var success = selectBucketByName(value)
 
+                        // 选择对应桶对象表格
+                        var success = selectBucketByName(value)
                         if (!success) {
-                            // 如果失败，刷新桶列表后重试
                             console.log("首次选择失败，刷新桶列表后重试...")
                             ManagerGlobal.refreshBuckets()
-
-                            // 延迟重试
                             Qt.callLater(function () {
                                 var retrySuccess = selectBucketByName(value)
                                 if (!retrySuccess) {
                                     console.error("重试后仍无法找到桶:", value)
                                 }
                             })
-                        }
-                    }
-
-                    // 搜索图标
-                    Label {
-                        anchors {
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            rightMargin: 8
-                        }
-                        text: "🔍"
-                        color: "#555555"
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (searchField.text.length > 0) {
-                                    searchRequested(searchField.text)
-                                }
-                            }
                         }
                     }
                 }
@@ -1786,10 +1764,14 @@ Item {
                                         MenuItem {
                                             text: qsTr("删除桶")
                                             onTriggered: {
+                                                // BUG 删除之后, 刷新界面
                                                 console.log("删除桶:",
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
                                                 ManagerGlobal.deleteBucket(
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "")
+                                                // switchToObjectsModel()
+                                                // 路径名, 然后更新
+                                                console.log(folderContextMenu.folderData.name)
                                             }
                                         }
                                     }
@@ -3019,8 +3001,6 @@ Item {
                                                         "桶名", currentBucket,
                                                         "路径",
                                                         contextMenu.rowData.key)
-                                            // 删除之后, 需要刷新, 并且重新导航到对应的路径
-                                            // 实现删除逻辑
                                             ManagerGlobal.deleteFile(
                                                         currentBucket,
                                                         contextMenu.rowData.key)
@@ -3381,5 +3361,65 @@ Item {
                 }
             }
         })
+
+        ManagerGlobal.deleteObjectSuccess.connect(function (bucket, key) {
+            console.log("删除对象成功: ", bucket, key)
+
+            tableView.clearSelection()
+
+            // 提取目录路径
+            var directoryPath = ""
+            var lastSlashIndex = key.lastIndexOf("/")
+
+            if (lastSlashIndex !== -1) {
+                directoryPath = key.substring(0, lastSlashIndex + 1)
+                console.log("提取的目录路径:", directoryPath) // 输出: "测试文件/"
+            }
+
+            // 刷新当前目录
+            if (directoryPath) {
+                // 会刷新多次
+                console.log("刷新1")
+                ManagerGlobal.refreshObjects(bucket, directoryPath)
+            } else {
+                console.log("刷新2")
+                ManagerGlobal.refreshObjects(bucket)
+            }
+            resetPaginationOnFolderChange()
+        })
+    }
+    // 在 MainPage.qml 中的下载完成处理函数中添加
+    function handleDownloadCompleted(jobId) {
+        // 查找对应的下载任务
+        for (var i = 0; i < downloadModel.count; i++) {
+            var item = downloadModel.get(i)
+            if (item.jobId === jobId) {
+                // 保存到历史记录
+                if (ManagerGlobal && ManagerGlobal.getHistoryManager) {
+                    var historyManager = ManagerGlobal.getHistoryManager()
+                    if (historyManager) {
+                        var record = {
+                            "jobId": item.jobId,
+                            "fileName": item.fileName,
+                            "fileSize": item.fileSize || 0,
+                            "bucketName": item.bucketName,
+                            "objectKey": item.objectKey,
+                            "localPath": item.localPath,
+                            "status": "已完成",
+                            "startTime": item.startTime || Date.now(),
+                            "completedTime": Date.now()
+                        }
+
+                        try {
+                            historyManager.addDownloadRecord(record)
+                            console.log("下载历史保存成功:", item.fileName)
+                        } catch (error) {
+                            console.error("保存下载历史失败:", error)
+                        }
+                    }
+                }
+                break
+            }
+        }
     }
 }

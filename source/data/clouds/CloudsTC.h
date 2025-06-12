@@ -2,6 +2,7 @@
 #define CLOUDSTC_H
 
 #include "baseclouds.h"
+#include <QFuture>
 #include <cos_api.h>
 #include <op/cos_result.h>
 #include <response/bucket_resp.h>
@@ -13,6 +14,13 @@ class CloudsTC : public BaseClouds {
 public:
   CloudsTC();
   ~CloudsTC();
+
+  QFuture<QList<TtObject>> getObjectsAsync(
+    const std::string &bucketName,
+    const std::string &dir
+  );
+  QFuture<QList<TtBucket>> bucketsAsync();
+
 
   QList<TtBucket> buckets() override;
 
@@ -79,6 +87,10 @@ private:
 
 private:
   qcloud_cos::CosConfig *m_config = nullptr;
+
+  QMutex m_configMutex; // 保护配置访问的互斥锁
+
+  QList<TtObject> getObjectsInternal(const std::string&bucketName, const std::string &dir);
 };
 
 #endif // CLOUDSTC_H

@@ -14,7 +14,7 @@ void ManagerCloud::login(const std::string &secretId,
   QList<TtBucket> buckets =
       ManGLOBAL->mPlugin->clouds()->login(secretId, secretKey);
   // 上面登录失败将会抛出异常, 下面的语句
-  qDebug() << "发射成功登录信号";
+  // qDebug() << "发射成功登录信号";
   emit ManGLOBAL->mSignal->loginSuccess();
   // 将桶数据传递给信号
   bucketsAlready(buckets);
@@ -93,11 +93,12 @@ void ManagerCloud::putObject(const std::string &jobId,
   };
 
   // 路径的问题
-  std::string localPathtest = "F:/MyProject/CloudStorageHub/"
-                              "build-CloudStorageHub-Desktop_Qt_6_6_3_MSVC2019_"
-                              "64bit-Release/CMakeCache.txt.prev";
-  ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPathtest,
-                                          callback);
+  // std::string localPathtest = "F:/MyProject/CloudStorageHub/"
+  //                             "build-CloudStorageHub-Desktop_Qt_6_6_3_MSVC2019_"
+  //                             "64bit-Release/CMakeCache.txt.prev";
+  // ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPathtest,
+  //                                         callback);
+  ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPath, callback);
   emit ManGLOBAL->mSignal->uploadSuccess(jobId);
 }
 
@@ -105,6 +106,7 @@ void ManagerCloud::deleteObject(const std::string &bucketName,
                                 const std::string &key) {
   ManGLOBAL->mPlugin->clouds()->deleteObject(bucketName, key);
   qDebug() << "发出删除对象的信号";
+  // 但是这里执行了
   emit ManGLOBAL->mSignal->deleteObjectSuccess(bucketName, key);
 }
 
