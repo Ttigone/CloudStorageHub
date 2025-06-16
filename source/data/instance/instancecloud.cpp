@@ -4,9 +4,31 @@
 #include "middle/signals/managersignals.h"
 #include "plugin/TtPlugin.h"
 
-ManagerCloud::ManagerCloud(QObject *parent) : QObject(parent) {}
+#include <data/clouds/CloudsTC.h>
 
-ManagerCloud::~ManagerCloud() { qDebug() << __FUNCTION__; }
+ManagerCloud::ManagerCloud(QObject *parent) : QObject(parent) {
+
+  m_bucketsWatcher = new QFutureWatcher<QList<TtBucket>>(this);
+  m_objectsWatcher = new QFutureWatcher<QList<TtObject>>(this);
+
+  // 缺失槽函数
+  connect(m_bucketsWatcher, &QFutureWatcher<QList<TtBucket>>::finished, this,
+          &ManagerCloud::handleBucketsLoaded);
+  connect(m_objectsWatcher, &QFutureWatcher<QList<TtObject>>::finished, this,
+          &ManagerCloud::handleObjectsLoaded);
+}
+
+ManagerCloud::~ManagerCloud() {
+  qDebug() << __FUNCTION__;
+  if (m_bucketsWatcher->isRunning()) {
+    m_bucketsWatcher->cancel();
+    m_bucketsWatcher->waitForFinished();
+  }
+  if (m_objectsWatcher->isRunning()) {
+    m_objectsWatcher->cancel();
+    m_objectsWatcher->waitForFinished();
+  }
+}
 
 void ManagerCloud::login(const std::string &secretId,
                          const std::string &secretKey) {
@@ -21,8 +43,9 @@ void ManagerCloud::login(const std::string &secretId,
 }
 
 void ManagerCloud::getBuckets() {
-  QList<TtBucket> buckets = ManGLOBAL->mPlugin->clouds()->buckets();
-  bucketsAlready(buckets);
+  // QList<TtBucket> buckets = ManGLOBAL->mPlugin->clouds()->buckets();
+  // bucketsAlready(buckets);
+  getBucketsAsync();
 }
 
 void ManagerCloud::putBucket(const std::string &bucketName,
@@ -41,15 +64,15 @@ void ManagerCloud::deleteBucket(const std::string &bucketName) {
 
 void ManagerCloud::getObjects(const std::string &bucketName,
                               const std::string &dir) {
-  QList<TtObject> objs =
-      ManGLOBAL->mPlugin->clouds()->getObjects(bucketName, dir);
-  // 保存桶名
-  m_currentBucketName = bucketName;
-  // 当前文件夹的名字, 带有 "/" 结尾
-  m_currentDir = dir;
-  // 发射信号
-  emit ManGLOBAL->mSignal->objectsSuccess(objs);
-  // return objs;
+  // QList<TtObject> objs =
+  //     ManGLOBAL->mPlugin->clouds()->getObjects(bucketName, dir);
+  // // 保存桶名
+  // m_currentBucketName = bucketName;
+  // // 当前文件夹的名字, 带有 "/" 结尾
+  // m_currentDir = dir;
+  // // 发射信号
+  // emit ManGLOBAL->mSignal->objectsSuccess(objs);
+  getObjectsAsync(bucketName, dir);
 }
 
 void ManagerCloud::getObject(const std::string &jobId,
@@ -120,4 +143,50 @@ void ManagerCloud::bucketsAlready(const QList<TtBucket> &buckets) {
   m_currentBucketName.clear();
   m_currentDir.clear();
   emit ManGLOBAL->mSignal->bucketsSuccess(buckets);
+}
+
+void ManagerCloud::getBucketsAsync() {
+  if (m_bucketsWatcher->isRunning()) {
+    m_bucketsWatcher->cancel();
+    m_bucketsWatcher->waitForFinished();
+  }
+  // 缺少信号
+  emit ManGLOBAL->mSignal->bucketsLoadingStarted();
+
+  CloudsTC *clouds = dynamic_cast<CloudsTC *>(ManGLOBAL->mPlugin->clouds());
+  if (clouds) {
+    QFuture<QList<TtBucket>> future = clouds->bucketsAsync();
+    m_bucketsWatcher->setFuture(future);
+  }
+}
+
+void ManagerCloud::getObjectsAsync(const std::string &bucketName,
+                                   const std::string &dir) {
+  if (m_objectsWatcher->isRunning()) {
+    m_objectsWatcher->cancel();
+    m_objectsWatcher->waitForFinished();
+  }
+  m_currentBucketName = bucketName;
+  m_currentDir = dir;
+
+  emit ManGLOBAL->mSignal->objectsLoadingStarted();
+
+  // 特定化方法了, 需求重写根类
+  CloudsTC *clouds = dynamic_cast<CloudsTC *>(ManGLOBAL->mPlugin->clouds());
+  if (clouds) {
+    QFuture<QList<TtObject>> future = clouds->getObjectsAsync(bucketName, dir);
+    m_objectsWatcher->setFuture(future);
+  }
+}
+
+void ManagerCloud::handleBucketsLoaded() {
+  QList<TtBucket> buckets = m_bucketsWatcher->result();
+  bucketsAlready(buckets);
+  emit ManGLOBAL->mSignal->bucketsLoadingFinished();
+}
+
+void ManagerCloud::handleObjectsLoaded() {
+  QList<TtObject> objects = m_objectsWatcher->result();
+  emit ManGLOBAL->mSignal->objectsSuccess(objects);
+  emit ManGLOBAL->mSignal->objectsLoadingFinished();
 }

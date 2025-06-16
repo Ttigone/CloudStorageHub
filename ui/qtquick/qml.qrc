@@ -24,6 +24,9 @@
         <file>Component/TtToolTip.qml</file>
         <file>Component/TtNotification.qml</file>
         <file>Component/FileUpLoadDialog.qml</file>
+        <file>Component/MessageDialog.qml</file>
+        <file>Component/notification/TtDesktopNotification.qml</file>
+        <file>Component/notification/TtDesktopNotificationManager.qml</file>
         <file>TransferManager/TransferWindow.qml</file>
         <file>TransferManager/TransferListView.qml</file>
         <file>TransferManager/TransferHistoryView.qml</file>

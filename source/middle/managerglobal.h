@@ -1,6 +1,7 @@
 ﻿#ifndef MANGLOBAL_H
 #define MANGLOBAL_H
 
+#include <QFileInfo>
 #include <QOBJECT>
 #include <QStandardItemModel>
 
@@ -37,6 +38,12 @@ class ManagerModels;
  */
 class ManagerGlobal : public QObject {
   Q_OBJECT
+  // 加载状态属性
+  Q_PROPERTY(
+      bool isBucketsLoading READ isBucketsLoading NOTIFY bucketsLoadingChanged)
+  Q_PROPERTY(
+      bool isObjectsLoading READ isObjectsLoading NOTIFY objectsLoadingChanged)
+
 public:
   explicit ManagerGlobal(QObject *parent = nullptr);
   ~ManagerGlobal();
@@ -201,17 +208,26 @@ public:
   // 添加历史记录管理器的访问方法
   Q_INVOKABLE HistoryManager *getHistoryManager() const;
 
-Q_INVOKABLE void handleDownloadCompleted(const QString &jobId, const QString &fileName,
-                                          const QString &bucketName, const QString &objectKey,
-                                          const QString &localPath, qint64 fileSize, bool success);
-  
-  Q_INVOKABLE void handleUploadCompleted(const QString &jobId, const QString &fileName,
-                                        const QString &bucketName, const QString &remotePath,
-                                        const QString &localPath, qint64 fileSize, bool success);
-                                        void saveCompletedDownloadToHistory(const QString &jobId);
+  Q_INVOKABLE void handleDownloadCompleted(const QString &jobId,
+                                           const QString &fileName,
+                                           const QString &bucketName,
+                                           const QString &objectKey,
+                                           const QString &localPath,
+                                           qint64 fileSize, bool success);
 
-void saveCompletedUploadToHistory(const QString &jobId);
+  Q_INVOKABLE void handleUploadCompleted(const QString &jobId,
+                                         const QString &fileName,
+                                         const QString &bucketName,
+                                         const QString &remotePath,
+                                         const QString &localPath,
+                                         qint64 fileSize, bool success);
+  void saveCompletedDownloadToHistory(const QString &jobId);
 
+  void saveCompletedUploadToHistory(const QString &jobId);
+
+  bool isBucketsLoading() const { return m_isBucketsLoading; }
+
+  bool isObjectsLoading() const { return m_isObjectsLoading; }
 
 signals:
   // 提供给 QML 使用
@@ -224,13 +240,25 @@ signals:
   void deleteObjectSuccess(const QString &bucketName, const QString &key);
 
   // 传输完成信号
-  void downloadCompleted(const QString &jobId, const QString &fileName, 
-                        const QString &bucketName, const QString &objectKey, 
-                        const QString &localPath, qint64 fileSize, bool success);
+  void downloadCompleted(const QString &jobId, const QString &fileName,
+                         const QString &bucketName, const QString &objectKey,
+                         const QString &localPath, qint64 fileSize,
+                         bool success);
   void uploadCompleted(const QString &jobId, const QString &fileName,
-                      const QString &bucketName, const QString &remotePath,
-                      const QString &localPath, qint64 fileSize, bool success);
+                       const QString &bucketName, const QString &remotePath,
+                       const QString &localPath, qint64 fileSize, bool success);
 
+  // 桶加载状态改变
+  void bucketsLoadingChanged();
+  // 对象加载状态改变
+  void objectsLoadingChanged();
+private slots:
+  // 处理桶加载开始和结束
+  void handleBucketsLoadingStarted();
+  void handleBucketsLoadingFinished();
+  // 处理对象加载开始和结束
+  void handleObjectsLoadingStarted();
+  void handleObjectsLoadingFinished();
 
 public:
   LoggerProxy *mLog{nullptr};
@@ -241,20 +269,32 @@ public:
   ManagerSignals *mSignal{nullptr};
   ManagerModels *mModels{nullptr};
 
+  Q_INVOKABLE void
+  saveDownloadToHistory(const QString &jobId, const QString &fileName,
+                        const QString &bucketName, const QString &objectKey,
+                        const QString &localPath, qint64 fileSize);
+
+  Q_INVOKABLE void
+  saveUploadToHistory(const QString &jobId, const QString &fileName,
+                      const QString &bucketName, const QString &remotePath,
+                      const QString &localPath, qint64 fileSize);
+
+  Q_INVOKABLE bool fileExists(const QString &filePath) {
+    // 检查某个文件是否存在
+    QFileInfo fileInfo(filePath);
+    return fileInfo.exists() && fileInfo.isFile();
+  }
+
 private:
   // 内部使用的历史记录保存方法
-  void saveDownloadToHistory(const QString &jobId, const QString &fileName,
-                            const QString &bucketName, const QString &objectKey,
-                            const QString &localPath, qint64 fileSize);
-  
-  void saveUploadToHistory(const QString &jobId, const QString &fileName,
-                          const QString &bucketName, const QString &remotePath,
-                          const QString &localPath, qint64 fileSize);
   // PaginationProxyModel *m_bucketsPaginationModel{nullptr};
   // PaginationProxyModel *m_objectsPaginationModel{nullptr};
   // bool m_isFirstLoadBucketModel{false};
 
   HistoryManager *m_historyManager{nullptr};
+
+  bool m_isBucketsLoading = false;
+  bool m_isObjectsLoading = false;
 };
 
 #endif // MANGLOBAL_H

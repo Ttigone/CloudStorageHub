@@ -8,6 +8,7 @@ import QtQml
 import Qt5Compat.GraphicalEffects
 
 import "./Component"
+import "./Component/notification"
 
 // 后端的 model 以赋值形式填入, 始终都是值更新, 没办法捕获底层的 model 是否改变, 赋值给代理模型, 代理模型不知道是否改变
 Item {
@@ -16,7 +17,6 @@ Item {
     property var columnWidths: [300, 150, 150, 100] // 名称、大小、日期、操作按钮区
     property int currentPerPage: 20
     property ListModel downloadModel: ListModel {}
-    // 在properties区域添加代理模型实例
     property var paginationProxy: null
     // // 添加一个属性来存储当前面包屑路径
     property var breadcrumbPathData: []
@@ -32,7 +32,7 @@ Item {
     signal logoutRequested
     signal updateCurrentBucket(string bucketName)
 
-    // 初始化完成
+    // 初始化完成：
     signal initializationCompleted
 
     // 暴露的属性和信号
@@ -41,27 +41,134 @@ Item {
 
     property int sortColumn: -1 // -1表示未排序，0,1,2,3对应不同列
     property bool sortAscending: true // true为升序，false为降序
-    // 没有定义
     property string currentBucket: "" // 当前选中的存储桶
 
-    // 添加属性存储当前记录数
     property int currentRecordCount: updateRecordCount()
     property int currentPage: 1
 
-    // 添加上传相关属性
     property ListModel uploadModel: ListModel {}
     property ListModel uploadHistoryModel: ListModel {}
-    property var fileUploadDialog: null // 添加这个属性
-    property var uploadPanel: null // 添加上传面板属性
+    property var fileUploadDialog: null
+    property var uploadPanel: null
 
-    // 添加桶列表更新的监听
+    TtDesktopNotificationManager {
+        id: notificationManager
+        anchors.fill: parent
+        z: 2000 // 确保在最顶层
+        position: "topRight"
+        maxNotifications: 4
+        // 🔥 添加组件完成回调，确保初始化完成
+        Component.onCompleted: {
+            console.log("📢 通知管理器初始化完成")
+        }
+    }
+
     Connections {
         target: ManagerGlobal
-        function onBucketListLoaded() {
-            console.log("桶列表加载完成，更新搜索框历史记录")
-            if (searchField) {
-                searchField.historyModel = ManagerGlobal.getBucketNames()
-                console.log("更新后的历史记录:", searchField.historyModel)
+        function onObjectsLoadingChanged() {
+            if (ManagerGlobal.isObjectsLoading) {
+                loadingOverlay.show("objects", "正在加载文件列表...")
+            } else {
+                loadingOverlay.hide()
+            }
+        }
+        function onBucketsLoadingChanged() {
+            if (ManagerGlobal.isBucketsLoading) {
+                loadingOverlay.show("buckets", "正在加载存储桶...")
+            } else {
+                loadingOverlay.hide()
+            }
+        }
+    }
+
+    // 🔥 快捷通知方法
+    // function showSuccessMessage(message, title, duration) {
+    //     rootItem.notificationManager.showSuccess(title || "操作成功", message,
+    //                                              duration || 3000)
+    // }
+    // 🔥 修复快捷通知方法 - 添加安全检查
+    function showSuccessMessage(message, title, duration) {
+        console.log("🔔 尝试显示成功消息:", message)
+
+        // 安全检查
+        if (!notificationManager) {
+            console.error("❌ 通知管理器未初始化")
+            return
+        }
+
+        if (typeof notificationManager.showSuccess !== "function") {
+            console.error("❌ showSuccess 方法不存在")
+            return
+        }
+
+        try {
+            notificationManager.showSuccess(title || "操作成功", message,
+                                            duration || 3000)
+            console.log("✅ 成功显示通知")
+        } catch (error) {
+            console.error("❌ 显示通知失败:", error)
+        }
+    }
+
+    Connections {
+        target: ManagerGlobal
+
+        function onDownloadCompleted(jobId, fileName, bucketName, objectKey, localPath, fileSize, success) {
+            console.log("✅ 接收到下载完成信号:", jobId, fileName, "成功:", success)
+            showSuccessMessage("下载任务已完成: " + fileName, "下载完成", 3000)
+            // 更新下载模型中的任务状态
+            for (var i = 0; i < downloadModel.count; i++) {
+                var item = downloadModel.get(i)
+                if (item && item.jobId === jobId) {
+                    downloadModel.setProperty(i, "status",
+                                              success ? "已完成" : "错误")
+                    downloadModel.setProperty(i, "progress",
+                                              success ? 1.0 : item.progress)
+
+                    if (fileName && fileName !== "downloaded_file.txt") {
+                        downloadModel.setProperty(i, "fileName", fileName)
+                        downloadModel.setProperty(i, "name", fileName)
+                    }
+
+                    if (typeof fileSize === 'number' && fileSize > 0) {
+                        downloadModel.setProperty(i, "size", fileSize)
+                        downloadModel.setProperty(i, "fileSize", fileSize)
+                    }
+
+                    downloadModel.setProperty(i, "completedTime",
+                                              new Date().getTime())
+
+                    if (success) {
+                        console.log("🔄 开始保存下载历史记录...")
+                        // 保存历史记录
+                        ManagerGlobal.saveDownloadToHistory(jobId, fileName,
+                                                            bucketName,
+                                                            objectKey,
+                                                            localPath, fileSize)
+                    }
+                    break
+                }
+            }
+        }
+        function onDownloadProgressUpdated(jobId, progress) {
+            console.log("更新下载进度:", jobId, progress)
+
+            for (var i = 0; i < downloadModel.count; i++) {
+                var item = downloadModel.get(i)
+                if (item && item.jobId === jobId) {
+                    var numericProgress = typeof progress === 'number' ? progress : parseFloat(
+                                                                             progress)
+                    downloadModel.setProperty(i, "progress", numericProgress)
+
+                    if (numericProgress >= 1.0) {
+                        downloadModel.setProperty(i, "status", "已完成")
+                        console.log("更新下载进度完成, 100%")
+                        handleDownloadCompleted(jobId)
+                    } else {
+                        downloadModel.setProperty(i, "status", "下载中")
+                    }
+                    break
+                }
             }
         }
     }
@@ -78,15 +185,19 @@ Item {
                         "qrc:/ui/TransferManager/TransferWindow.qml")
             if (component.status === Component.Ready) {
                 transferWindow = component.createObject(rootItem)
-                // 设置传输模型
                 transferWindow.uploadModel = rootItem.uploadModel
-                transferWindow.downloadModel = rootItem.downloadModel // 正在下载
-                // transferWindow.uploadHistoryModel = Qt.createQmlObject(
-                //             'import QtQuick; ListModel {}', transferWindow)
+                transferWindow.downloadModel = rootItem.downloadModel
                 transferWindow.uploadHistoryModel = rootItem.uploadHistoryModel
-                transferWindow.downloadHistoryModel = rootItem.downloadHistoryModel // 历史下载
+                transferWindow.downloadHistoryModel = rootItem.downloadHistoryModel
+                Qt.callLater(function () {
+                    if (transferWindow.loadDownloadHistory) {
+                        transferWindow.loadDownloadHistory()
+                    }
+                    if (transferWindow.loadUploadHistory) {
+                        transferWindow.loadUploadHistory()
+                    }
+                })
 
-                // 连接传输控制信号
                 transferWindow.transferPaused.connect(function (jobId, type) {
                     console.log("暂停传输:", jobId, type)
                     if (type === "upload") {
@@ -150,6 +261,16 @@ Item {
         if (transferWindow) {
             transferWindow.uploadModel = rootItem.uploadModel
             transferWindow.downloadModel = rootItem.downloadModel
+            // 如果历史记录模型为空，重新加载
+            if (transferWindow.downloadHistoryModel
+                    && transferWindow.downloadHistoryModel.count === 0) {
+                Qt.callLater(function () {
+                    if (transferWindow.loadDownloadHistory) {
+                        // 调用空方法
+                        transferWindow.loadDownloadHistory()
+                    }
+                })
+            }
             transferWindow.show()
             transferWindow.raise()
             transferWindow.requestActivate()
@@ -211,6 +332,12 @@ Item {
             fileUploadDialog.bucketList = ManagerGlobal.getBucketNames()
         }
         fileUploadDialog.open()
+    }
+
+    function handleOpenBucket(bucketName) {
+        switchToObjectsModel(bucketName)
+        breadcrumbNav.clearModel(bucketName)
+        breadcrumbNav.addPathItem(bucketName, bucketName)
     }
 
     // 处理上传任务
@@ -421,11 +548,12 @@ Item {
                                  "needsRetry": false,
                                  "retryCount": 0
                              })
+
         // 下载名有问题
         // 点击下载后, 提供的 key 是有效的路径
         // 获取的 name 有问题
         console.log("添加下载任务:", jobId, taskInfo.name, taskInfo.size,
-                    taskInfo.key, taskInfo.name)
+                    taskInfo.key)
         ManagerGlobal.downloadFile(jobId, rootItem.currentBucket, taskInfo.key,
                                    localPath)
         createDownloadTimeoutCheck(jobId)
@@ -574,10 +702,7 @@ Item {
                 const name = item.name
 
                 console.log("重试下载:", jobId, bucketName, key, name)
-                // 执行下载
-                // name 有问题
                 ManagerGlobal.downloadFile(jobId, bucketName, key, name)
-                // 为该任务设置超时检测
                 Qt.callLater(function () {
                     checkDownloadProgress(jobId)
                 })
@@ -595,12 +720,7 @@ Item {
         const startIndex = downloadBatchTimer.nextIndex
         const endIndex = Math.min(startIndex + downloadBatchTimer.batchSize,
                                   downloadBatchTimer.batchItems.length)
-        // console.log(`处理批次 ${Math.floor(
-        //                 startIndex / downloadBatchTimer.batchSize) + 1}/${Math.ceil(
-        //                 downloadBatchTimer.batchItems.length
-        //                 / downloadBatchTimer.batchSize)}, 项目 ${startIndex + 1}-${endIndex}`)
         for (var i = startIndex; i < endIndex; i++) {
-            // 逐个加入到任务队列中
             addDownloadTask(downloadBatchTimer.batchItems[i])
         }
         downloadBatchTimer.nextIndex = endIndex
@@ -622,26 +742,9 @@ Item {
             processBatchDownloads()
         }
     }
-    // 添加下载历史模型
     property ListModel downloadHistoryModel: ListModel {}
 
-    // 添加下载管理窗口属性
     property var downloadWindow: null
-
-    // 添加创建下载窗口的函数
-    // function createDownloadWindow() {
-    //     var component = Qt.createComponent("DownloadWindow.qml")
-    //     console.log("创建下载窗口组件")
-    //     if (component.status === Component.Ready) {
-    //         // 引用关系
-    //         downloadWindow = component.createObject(rootItem, {
-    //                                                     "downloadModel": rootItem.downloadModel,
-    //                                                     "historyModel": rootItem.downloadHistoryModel
-    //                                                 })
-    //     } else {
-    //         console.error("无法创建下载管理窗口:", component.errorString())
-    //     }
-    // }
 
     // 添加获取活跃下载数的函数
     function getActiveDownloadCount() {
@@ -660,7 +763,6 @@ Item {
     }
 
     function sortByColumn(column, ascending) {
-        // 创建临时数组存储所有数据
         let rows = []
         for (var i = 0; i < tableModel.rowCount; i++) {
             rows.push(tableModel.getRow(i))
@@ -678,14 +780,12 @@ Item {
                 valueA = a.zone ? a.zone.toLowerCase() : ""
                 valueB = b.zone ? b.zone.toLowerCase() : ""
             } else if (column === 3) {
-                // 处理日期排序 - 使用日期格式解析
                 valueA = parseDateString(a.date)
                 valueB = parseDateString(b.date)
             } else {
-                return 0 // 不支持的列
+                return 0
             }
 
-            // 升序/降序比较
             if (ascending) {
                 if (valueA < valueB)
                     return -1
@@ -701,69 +801,49 @@ Item {
             }
         })
 
-        // 清除当前数据并按排序顺序重新添加
         tableModel.clear()
         for (var i = 0; i < rows.length; i++) {
             tableModel.appendRow(rows[i])
         }
     }
     function resetPaginationOnFolderChange() {
-        // 重置到第一页
         rootItem.currentPage = 1
-        // 清空选择
         tableView.clearSelection()
         rootItem.currentRecordCount = updateRecordCount()
 
-        // 重新计算分页范围
-        rootItem.pageStartRow = 0 // 从第一条记录开始
+        rootItem.pageStartRow = 0
         rootItem.pageEndRow = Math.min(currentPerPage, currentRecordCount) - 1
 
-        // 强制更新分页导航显示
         pagination.totalRecords = rootItem.currentRecordCount
         pagination.currentPage = 1
         rootItem.updatePaginationState()
 
-        // 点击 root ，触发 2 次
-        // 获取的记录数就有
         console.log("文件夹变更，重置分页状态：当前页=1，总记录数=", rootItem.currentRecordCount)
     }
 
-    // 添加解析日期字符串的辅助函数
     function parseDateString(dateStr) {
         if (!dateStr) {
             return 0
         }
         try {
-            // 尝试解析为日期对象
             const date = new Date(dateStr)
             if (isNaN(date.getTime())) {
                 return dateStr.toLowerCase()
             }
-            // 返回时间戳用于比较
             return date.getTime()
         } catch (e) {
-            // 失败情况下返回原始字符串
             return dateStr.toLowerCase()
         }
     }
 
-    // 切换到桶模型显示
     function switchToBucketsModel() {
-        // 保存当前表格视图状态
         tableView.inBucketMode = true
-        // 根据当前可用宽度计算桶模型的列宽
         const availableWidth = contentPanel.width
         if (availableWidth > 0) {
-            // 为桶模型设置适合的列宽比例
-            rootItem.columnWidths = [Math.max(
-                                         200,
-                                         availableWidth * 0.60), // 桶名称列占60%
-                                     Math.max(
-                                         150,
-                                         availableWidth * 0.20), // 创建时间列占20%
-                                     Math.max(150,
-                                              availableWidth * 0.20) // 区域列占20%
-                    ]
+            rootItem.columnWidths = [Math.max(200,
+                                              availableWidth * 0.60), Math.max(
+                                         150, availableWidth * 0.20), Math.max(
+                                         150, availableWidth * 0.20)]
             console.log("桶模型列宽设置为:", rootItem.columnWidths)
         } else {
             rootItem.columnWidths = [500, 200, 200]
@@ -777,48 +857,52 @@ Item {
         tableView.forceLayout()
     }
 
-    // 更新对象数据模型
     function switchToObjectsModel(bucketName) {
+        showSuccessMessage(`正在切换到对象模型: ${bucketName}`, "切换成功", 2000)
         tableView.inBucketMode = false
+        tableView.clearSelection()
         const availableWidth = contentPanel.width
         if (availableWidth > 0) {
-            // rootItem.columnWidths = [Math.max(200,
-            //                                   availableWidth * 0.50), Math.max(
-            //                              150, availableWidth * 0.25), Math.max(
-            //                              150, availableWidth * 0.25)]
             rootItem.columnWidths = [Math.max(200,
-                                              availableWidth * 0.45), // 名称列占45%
-                                     Math.max(150,
-                                              availableWidth * 0.20), // 大小列占20%
-                                     Math.max(
-                                         150,
-                                         availableWidth * 0.20), // 更新时间列占20%
-                                     Math.max(100,
-                                              availableWidth * 0.15) // 操作列占15%
-                    ]
-            console.log("对象模型列宽设置为:", rootItem.columnWidths)
-            // 有获取到正确的列宽
-            // 这里提供了
-            console.log("操作列宽度: " + rootItem.columnWidths[3])
+                                              availableWidth * 0.45), Math.max(
+                                         150, availableWidth
+                                         * 0.20), Math.max(150,
+                                                           availableWidth * 0.20), Math.max(
+                                         100, availableWidth * 0.15)]
         } else {
-            // rootItem.columnWidths = [300, 150, 150]
-            rootItem.columnWidths = [300, 150, 150, 100] // 添加第4列
+            rootItem.columnWidths = [300, 150, 150, 100]
         }
-        // headerBar.headerTitles = ["对象名称", "大小", "更新时间"]
-        headerBar.headerTitles = ["对象名称", "大小", "更新时间", "操作"]
-        // 点击左侧, 出现问题, 未定义的
-        console.log("调用一次并刷新对象", bucketName)
-        // 先刷新对象名
-        // 先获取 model, 再刷新 model 里面的值 ???
-        tableView.model = ManagerGlobal.getObjectsModel()
-        ManagerGlobal.refreshObjects(bucketName)
+        headerBar.headerTitles = [qsTr("对象名称"), qsTr("大小"), qsTr(
+                                      "更新时间"), qsTr("操作")]
+        var objectsModel = ManagerGlobal.getObjectsModel()
+        if (!objectsModel) {
+            console.error("无法获取对象模型")
+            return
+        }
+        if (typeof objectsModel.clear === "function") {
+            objectsModel.clear()
+            console.log("已清空对象模型数据")
+        } else if (typeof objectsModel.removeRows === "function") {
+            var rowCount = objectsModel.rowCount()
+            if (rowCount > 0) {
+                objectsModel.removeRows(0, rowCount)
+                console.log("已移除所有行数据")
+            }
+        }
+        tableView.model = objectsModel
         tableView.contentY = 0
         tableView.forceLayout()
+        Qt.callLater(function () {
+            if (rootItem.currentBucket === bucketName) {
+                ManagerGlobal.refreshObjects(bucketName)
+            } else {
+                console.warn("️桶已切换，取消数据请求:", bucketName)
+            }
+        })
+        console.log("对象模型切换完成:", bucketName)
     }
-    // 添加分页控制属性 - 在根项目定义这些属性使它们全局可用
-    // 初始 0
+
     property int pageStartRow: (currentPage - 1) * currentPerPage
-    // 初始 0 + 20, 0   -> 0  - 1 -> -1
     property int pageEndRow: Math.min(pageStartRow + currentPerPage,
                                       currentRecordCount) - 1
 
@@ -827,9 +911,6 @@ Item {
     }
 
     function getPageEndRow() {
-        // console.log("获取当前页结束行: ", getPageStartRow(), currentPerPage,
-        // currentRecordCount)
-        // 0 + 1 , 3
         return Math.min(getPageStartRow() + currentPerPage,
                         currentRecordCount) - 1
     }
@@ -842,66 +923,155 @@ Item {
         })
     }
 
-    // 添加刷新记录数的函数
     function updateRecordCount() {
         if (!tableView.model) {
             return 0
         }
-
-        // 优先使用 totalCount 属性获取总记录数
         if (typeof tableView.model.totalCount !== "undefined") {
             return tableView.model.totalCount
         }
-
-        // 如果没有 totalCount，则尝试使用 rowCount 函数
         if (typeof tableView.model.rowCount === "function") {
             return tableView.model.rowCount()
         }
 
         return 0
     }
-    // 添加获取当前页记录数的函数
+
     function getCurrentPageRowCount() {
         if (!tableView.model)
             return 0
-        // 优先使用专门的当前页行数属性
         if (typeof tableView.model.currentPageRowCount !== "undefined") {
             return tableView.model.currentPageRowCount
         }
-        // 回退方案：手动计算当前页行数
         const totalRecords = updateRecordCount()
         const rowsPerPage = pagination.rowsPerPage
         const currentPage = pagination.currentPage
         const firstRow = (currentPage - 1) * rowsPerPage
-
-        // console.log("获取当前页行数: ", totalRecords, rowsPerPage,
-        //             currentPage, firstRow)
-        // console.log("计算当前页行数: ", Math.min(rowsPerPage, totalRecords - firstRow))
         return Math.min(rowsPerPage, totalRecords - firstRow)
     }
 
-    // 在 rootItem 中定义处理函数
-    function handleBucketDoubleClick(bucketName) {
-        console.log("双击打开桶:", bucketName)
-        switchToObjectsModel(bucketName)
-        updateCurrentBucket(bucketName)
-        // 设置左侧列表选中项
-        for (var i = 0; i < bucketListView.count; i++) {
-            if (bucketListView.model.data(bucketListView.model.index(
-                                              i, 0)) === bucketName) {
-                bucketListView.currentIndex = i
-                break
-            }
-        }
+    // 添加到 MainPage.qml 中的函数区域
+    function handleBucketSwitch(bucketName) {
+        console.log("🔄 开始切换桶:", bucketName)
 
-        // 设置面包屑导航
+        // 🔥 显示加载状态
+        loadingOverlay.show("objects", `正在加载 ${bucketName} 中的文件...`)
+
+        // 🔥 立即更新界面状态
+        currentBucket = bucketName
+
+        // 🔥 清空选择状态
+        tableView.clearSelection()
+
+        // 🔥 更新左侧桶列表选择
+        updateBucketListSelection(bucketName)
+
+        // 🔥 重置面包屑导航
         breadcrumbNav.resetToRoot()
-        // 添加失败, 有效
-        console.log("添加面包屑路径:", bucketName, bucketName)
         breadcrumbNav.addPathItem(bucketName, bucketName)
 
-        // 重置分页
+        // 🔥 重置分页状态
         resetPaginationOnFolderChange()
+
+        // 🔥 关键：先切换到对象模式，再请求数据
+        switchToObjectsModelSafely(bucketName)
+    }
+
+    function handleBucketRefresh(bucketName) {
+        console.log("🔄 刷新桶:", bucketName)
+
+        loadingOverlay.show("objects", `正在刷新 ${bucketName} 中的文件...`)
+
+        // 清空选择但保持其他状态
+        tableView.clearSelection()
+
+        // 直接刷新数据
+        ManagerGlobal.refreshObjects(bucketName)
+    }
+
+    function switchToObjectsModelSafely(bucketName) {
+        console.log("🔄 安全切换到对象模型:", bucketName)
+
+        try {
+            // 🔥 设置表格模式
+            tableView.inBucketMode = false
+
+            // 🔥 计算列宽
+            const availableWidth = contentPanel.width
+            if (availableWidth > 0) {
+                rootItem.columnWidths = [Math.max(200,
+                                                  availableWidth * 0.45), Math.max(
+                                             150, availableWidth
+                                             * 0.20), Math.max(150,
+                                                               availableWidth * 0.20), Math.max(
+                                             100, availableWidth * 0.15)]
+            } else {
+                rootItem.columnWidths = [300, 150, 150, 100]
+            }
+
+            headerBar.headerTitles = ["对象名称", "大小", "更新时间", "操作"]
+
+            var objectsModel = ManagerGlobal.getObjectsModel()
+            if (!objectsModel) {
+                console.error("❌ 无法获取对象模型")
+                loadingOverlay.hide()
+                return
+            }
+
+            if (typeof objectsModel.clear === "function") {
+                objectsModel.clear()
+                console.log("✅ 已清空对象模型数据")
+            }
+
+            // 🔥 设置表格模型
+            tableView.model = objectsModel
+
+            // 🔥 重置滚动位置
+            tableView.contentY = 0
+
+            // 🔥 强制刷新布局
+            tableView.forceLayout()
+
+            // 🔥 延迟请求数据，确保界面状态已更新
+            Qt.callLater(function () {
+                if (rootItem.currentBucket === bucketName) {
+                    console.log("🔄 开始请求桶数据:", bucketName)
+                    ManagerGlobal.refreshObjects(bucketName)
+                } else {
+                    console.warn("⚠️ 桶已切换，取消数据请求:", bucketName)
+                    loadingOverlay.hide()
+                }
+            })
+
+            console.log("✅ 对象模型切换完成:", bucketName)
+        } catch (error) {
+            console.error("❌ 切换对象模型失败:", error)
+            loadingOverlay.hide()
+        }
+    }
+
+    function updateBucketListSelection(bucketName) {
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.warn("无法获取桶模型")
+                return
+            }
+
+            // 查找匹配的桶并设置选择
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var currentBucketName = bucketModel.data(index, Qt.DisplayRole)
+
+                if (currentBucketName === bucketName) {
+                    bucketListView.currentIndex = i
+                    console.log("✅ 更新桶列表选择:", bucketName, "索引:", i)
+                    break
+                }
+            }
+        } catch (error) {
+            console.error("❌ 更新桶列表选择失败:", error)
+        }
     }
 
     onDownloadRequested: function (selectedItems) {
@@ -923,6 +1093,13 @@ Item {
         downloadBatchTimer.batchSize = 4
 
         processBatchDownloads()
+    }
+    // 确保有 LoadingOverlay 组件
+    LoadingOverlay {
+        id: loadingOverlay
+        anchors.fill: parent
+        z: 1000
+        // active: false
     }
 
     // 整体布局
@@ -1266,6 +1443,7 @@ Item {
                                     color: "#FFFFFF"
                                     Layout.alignment: Qt.AlignVCenter
                                     Layout.fillWidth: true
+                                    // eorizontalAlignment: Text.AlignHCenter
                                     horizontalAlignment: Text.AlignHCenter
                                     elide: Text.ElideRight // 如果文字太长则省略
                                     wrapMode: Text.NoWrap
@@ -1692,7 +1870,6 @@ Item {
                                         elide: Text.ElideRight
                                     }
                                 }
-                                // 在 ItemDelegate 中添加
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -1701,7 +1878,6 @@ Item {
 
                                     onClicked: function (mouse) {
                                         if (mouse.button === Qt.RightButton) {
-                                            // 右键单击
                                             folderContextMenu.folderData = modelData
                                             folderContextMenu.folderIndex = index
                                             folderContextMenu.popup()
@@ -1709,15 +1885,11 @@ Item {
                                         mouse.accepted = false
                                     }
                                     onDoubleClicked: function (mouse) {
-                                        // 发送给后端, 要请求的数据
                                         if (mouse.button === Qt.LeftButton) {
-                                            console.log("Request Object by Current Bucket: ",
-                                                        model.display)
-                                            // 点击点击根图标, 刷新了
+
                                             if (model.display === currentBucket) {
                                                 if (model.display !== breadcrumbNav.getCurrentPath(
                                                             )) {
-                                                    console.log("非当前路径")
                                                     breadcrumbNav.resetToRoot()
                                                     breadcrumbNav.addPathItem(
                                                                 model.display,
@@ -1726,14 +1898,12 @@ Item {
                                                                 model.display)
                                                     mouse.accepted = true
                                                 } else {
-                                                    console.log("点击了当前已选中的桶，仅刷新")
                                                     switchToObjectsModel(
                                                                 model.display)
                                                     mouse.accepted = true
                                                 }
                                                 return
                                             }
-                                            console.log("切换到新桶:", model.display)
                                             breadcrumbNav.resetToRoot()
                                             var bucketName = model.display
                                             currentBucket = bucketName
@@ -1742,7 +1912,6 @@ Item {
                                                         bucketName, bucketName)
                                             switchToObjectsModel(bucketName)
                                             resetPaginationOnFolderChange()
-                                            // 刷新对象的显示问题
                                             mouse.accepted = true
                                         }
                                     }
@@ -1764,13 +1933,10 @@ Item {
                                         MenuItem {
                                             text: qsTr("删除桶")
                                             onTriggered: {
-                                                // BUG 删除之后, 刷新界面
                                                 console.log("删除桶:",
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
                                                 ManagerGlobal.deleteBucket(
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "")
-                                                // switchToObjectsModel()
-                                                // 路径名, 然后更新
                                                 console.log(folderContextMenu.folderData.name)
                                             }
                                         }
@@ -2051,23 +2217,16 @@ Item {
                                     }
 
                                     function onRowsRemoved() {
-                                        // console.log("行被删除")
                                         rootItem.updateRecordCount() // 更新记录数
                                     }
                                 }
-                                // 添加排序函数
                                 function sortByColumn(column, ascending) {
-                                    // 创建临时数组存储所有数据
                                     let rows = []
                                     for (var i = 0; i < tableModel.rowCount; i++) {
                                         rows.push(tableModel.getRow(i))
                                     }
-
-                                    // 根据选定的列排序
                                     rows.sort(function (a, b) {
                                         let valueA, valueB
-
-                                        // 根据列选择字段
                                         if (column === 1) {
                                             valueA = a.name ? a.name.toLowerCase(
                                                                   ) : ""
@@ -2079,16 +2238,13 @@ Item {
                                             valueB = b.zone ? b.zone.toLowerCase(
                                                                   ) : ""
                                         } else if (column === 3) {
-                                            // 处理日期排序 - 使用日期格式解析
                                             valueA = rootItem.parseDateString(
                                                         a.date)
                                             valueB = rootItem.parseDateString(
                                                         b.date)
                                         } else {
-                                            return 0 // 不支持的列
+                                            return 0
                                         }
-
-                                        // 升序/降序比较
                                         if (ascending) {
                                             if (valueA < valueB)
                                                 return -1
@@ -2103,8 +2259,6 @@ Item {
                                             return 0
                                         }
                                     })
-
-                                    // 清除当前数据并按排序顺序重新添加
                                     tableModel.clear()
                                     for (var i = 0; i < rows.length; i++) {
                                         tableModel.appendRow(rows[i])
@@ -2112,22 +2266,16 @@ Item {
                                 }
                                 columnWidthProvider: function (column) {
                                     try {
-                                        // console.log("Current column: ", column)
                                         if (column < 0
                                                 || !rootItem.columnWidths) {
                                             return 0
                                         }
-
-                                        // 特别处理操作列
                                         if (column === 3) {
                                             if (tableView.inBucketMode) {
-                                                // console.log("桶模式下操作列宽度为0")
                                                 return 0
                                             } else {
                                                 var width = rootItem.columnWidths.length
                                                         > 3 ? rootItem.columnWidths[3] : 100
-                                                // 这里没有输出
-                                                // console.log("操作列宽度:", width)
                                                 return width
                                             }
                                         }
@@ -2267,14 +2415,11 @@ Item {
                                                     rightMargin: 8
                                                 }
                                                 spacing: 8
-                                                // 添加文本图标组件
                                                 Text {
                                                     id: fileIcon
-                                                    // 每次渲染时强制重新计算，不依赖于缓存的属性值
-                                                    // 需要加一个 桶图标
                                                     text: {
                                                         if (tableView.inBucketMode) {
-                                                            return "🪣" // 桶图标
+                                                            return "🪣"
                                                         } else {
                                                             return nameCell.isFolderType(
                                                                         ) ? "📁" : "📄"
@@ -2291,12 +2436,10 @@ Item {
                                                     }
                                                     Layout.preferredWidth: 24
                                                 }
-                                                // 文本标签同样使用函数
                                                 Text {
                                                     id: cellText
                                                     Layout.fillWidth: true
                                                     text: {
-                                                        // 每次访问时重新计算
                                                         let name = model.display
                                                             || "未命名"
                                                         return nameCell.isFolderType()
@@ -2313,19 +2456,6 @@ Item {
                                                 // 添加模型变更监听
                                                 Component.onCompleted: {
 
-                                                    // 这里获取的数据是正确的
-                                                    // 为什么数据是最后获取, 初始化完成后才会获取 ???
-                                                    // if (row < 5) {
-                                                    //     // 有时候会少一行, 但是模型存在
-                                                    //     // 只有一行
-                                                    //     console.debug(
-                                                    //                 "渲染初始化, 行:",
-                                                    //                 row, "名称:",
-                                                    //                 model.display,
-                                                    //                 "isFolder:",
-                                                    //                 nameCell.isFolderType(
-                                                    //                     ))
-                                                    // }
                                                 }
                                             }
                                             // 处理点击事件
@@ -2334,12 +2464,9 @@ Item {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                cursorShape: Qt.PointingHandCursor // 这里似乎失效了, 没有显示
-                                                propagateComposedEvents: !nameCell.isEditing // 编辑时不传播事件
+                                                cursorShape: Qt.PointingHandCursor
+                                                propagateComposedEvents: !nameCell.isEditing
                                                 property var root: rootItem
-                                                // property var navBread: breadcrumbNav
-                                                // property var bucketList: bucketListView
-                                                // property var manager: ManagerGlobal
                                                 onClicked: function (mouse) {
                                                     console.log("Clicked on row",
                                                                 row)
@@ -2349,18 +2476,10 @@ Item {
                                                             if (mouse.button === Qt.LeftButton) {
                                                                 // 获取桶名
                                                                 const bucketName = model.display
-                                                                // console.log("选择桶:",
-                                                                //             bucketName)
                                                                 // 普通点击只是选择，不导航
                                                                 tableView.clearSelection()
-                                                                // // 给行添加选中效果
-                                                                // const rowData = {
-                                                                //     "id": "bucket" + row,
-                                                                //     "name": bucketName
-                                                                // }
                                                             } else if (mouse.button
                                                                        === Qt.RightButton) {
-                                                                // 桶的右键菜单
                                                                 bucketContextMenu.bucketName
                                                                         = model.display
                                                                 bucketContextMenu.rowIndex = row
@@ -2472,20 +2591,16 @@ Item {
                                                     }
                                                 }
                                                 onDoubleClicked: function (mouse) {
-                                                    // BUG 设置面包屑路径有问题
                                                     if (mouse.button === Qt.LeftButton) {
-                                                        // 桶模式下的双击处理
                                                         if (tableView.inBucketMode) {
-                                                            // 新的参数 未定义
                                                             console.log("打开桶列表: ",
                                                                         model.display)
-                                                            root.handleBucketDoubleClick(
-                                                                        model.display)
+                                                            currentBucket = model.display
+                                                            handleOpenBucket(
+                                                                        currentBucket)
                                                             return
                                                         }
-                                                        // 判断是否是文件夹, 否则不能下钻, 但是可以打开
                                                         const isFolder = nameCell.isFolderType()
-                                                        // 获取有问题
                                                         if (!isFolder) {
                                                             console.log("双击的不是文件夹, 忽略操作")
                                                             return
@@ -2501,12 +2616,9 @@ Item {
                                                                         row)
                                                             return
                                                         }
-                                                        // 获取模型
                                                         var currentObjectModel = tableView.model
-                                                        // 获取当前名称列
                                                         var indexCol0 = currentObjectModel.index(
                                                                     row, 0)
-                                                        // Index for the first column
                                                         if (indexCol0
                                                                 && indexCol0.valid) {
                                                             // 名字
@@ -2520,20 +2632,20 @@ Item {
                                                                 rowData.size = userRoleDataMap.size
                                                                 rowData.date = userRoleDataMap.lastModified
                                                             } else {
-                                                                // Fallback if UserRole data is not available or incomplete
                                                                 console.warn(
                                                                             "UserRole data missing for row:",
                                                                             row,
                                                                             "name:",
                                                                             rowData.name)
-                                                                rowData.isFolder = (rowData.name && rowData.name.endsWith('/')) // Infer from name
-                                                                rowData.key = rowData.name // Simplistic fallback for key
+                                                                rowData.isFolder
+                                                                        = (rowData.name
+                                                                           && rowData.name.endsWith(
+                                                                               '/'))
+                                                                rowData.key = rowData.name
 
-                                                                // Attempt to get size/date from DisplayRole of other columns if not in UserRole
                                                                 var indexCol1 = currentObjectModel.index(
                                                                             row,
                                                                             1)
-                                                                // Assuming size is column 1
                                                                 if (indexCol1
                                                                         && indexCol1.valid)
                                                                     rowData.size = currentObjectModel.data(indexCol1, Qt.DisplayRole)
@@ -2541,7 +2653,6 @@ Item {
                                                                 var indexCol2 = currentObjectModel.index(
                                                                             row,
                                                                             2)
-                                                                // Assuming date is column 2
                                                                 if (indexCol2
                                                                         && indexCol2.valid)
                                                                     rowData.date = currentObjectModel.data(indexCol2, Qt.DisplayRole)
@@ -2552,9 +2663,7 @@ Item {
                                                                         row,
                                                                         " 的有效索引。")
                                                             return
-                                                            // Cannot proceed without valid data
                                                         }
-                                                        // Ensure rowData.isFolder is consistent with the earlier check
                                                         if (rowData.isFolder !== isFolder) {
                                                             console.warn("双击处理：rowData.isFolder (" + rowData.isFolder + ") 与 nameCell.isFolderType() (" + isFolder + ") 不一致。 UserRole/derived data is used for rowData.")
                                                         }
@@ -2579,61 +2688,14 @@ Item {
                                                                         ))
 
                                                         const displayName = rowData.name.endsWith('/') ? rowData.name.substring(0, rowData.name.length - 1) : rowData.name
-                                                        // 值正确的, 但是显示不正确移植是 /
                                                         console.log("双击打开文件夹和路径:",
                                                                     keyToNavigate,
                                                                     displayName)
                                                         breadcrumbNav.addPathItem(
                                                                     keyToNavigate,
                                                                     displayName)
-                                                        // 重置分页状态
                                                         resetPaginationOnFolderChange()
                                                     }
-                                                    // 发送给后端, 要请求的数据
-                                                    // if (mouse.button === Qt.LeftButton) {
-                                                    //     console.log("Request Object by Current Bucket: ",
-                                                    //                 model.display)
-                                                    //     if (model.display === currentBucket) {
-                                                    //         if (model.display !== breadcrumbNav.getCurrentPath(
-                                                    //                     )) {
-                                                    //             breadcrumbNav.resetToRoot()
-                                                    //             ManagerGlobal.refreshObjects(
-                                                    //                         model.display)
-                                                    //             breadcrumbNav.addPathItem(
-                                                    //                         model.display,
-                                                    //                         model.display)
-                                                    //             mouse.accepted = true
-                                                    //         } else {
-                                                    //             console.log("点击了当前已选中的桶，仅刷新")
-                                                    //             ManagerGlobal.refreshObjects(
-                                                    //                         model.display)
-                                                    //             mouse.accepted = true
-                                                    //         }
-                                                    //         return
-                                                    //     }
-                                                    //     // 修复的代码行
-                                                    //     console.log("切换到新桶:",
-                                                    //                 model.display)
-                                                    //     breadcrumbNav.resetToRoot()
-                                                    //     var bucketName = model.display
-                                                    //     currentBucket
-                                                    //             = bucketName // 直接引用属性，不通过rootItem
-                                                    //     bucketListView.currentIndex = index
-                                                    //     breadcrumbNav.addPathItem(
-                                                    //                 bucketName,
-                                                    //                 bucketName)
-                                                    //     resetPaginationOnFolderChange()
-                                                    //     // 先切换对象模型
-                                                    //     switchToObjectsModel(
-                                                    //                 model.display)
-                                                    //     // 刷新对象的显示问题
-                                                    //     // 出现未定义 ???
-                                                    //     // if (ManagerGlobal) {
-                                                    //     //     ManagerGlobal.refreshObjects(
-                                                    //     //                 model.display)
-                                                    //     // }
-                                                    //     mouse.accepted = true
-                                                    // }
                                                 }
                                             }
                                         }
@@ -2648,7 +2710,6 @@ Item {
                                                 try {
                                                     if (!tableView.selectedItems)
                                                         return false
-                                                    // 使用直接的 row 标识符而不依赖于 tableModel
                                                     return tableView.selectedItems.some(
                                                                 item => item.id === "obj" + row)
                                                 } catch (e) {
@@ -2689,7 +2750,6 @@ Item {
                                                 try {
                                                     if (!tableView.selectedItems)
                                                         return false
-                                                    // 使用直接的 row 标识符而不依赖于 tableModel
                                                     return tableView.selectedItems.some(
                                                                 item => item.id === "obj" + row)
                                                 } catch (e) {
@@ -2743,7 +2803,6 @@ Item {
                                                         return false
                                                     }
 
-                                                    // 安全地检查模型数据
                                                     if (!model) {
                                                         return false
                                                     }
@@ -2757,7 +2816,6 @@ Item {
                                                         return false
                                                     }
 
-                                                    // 如果文件名为空或未定义，不显示按钮
                                                     if (!fileName) {
                                                         return false
                                                     }
@@ -2802,7 +2860,6 @@ Item {
                                                             }
                                                         }
 
-                                                        // 回退方案：通过文件名判断
                                                         var isFolder = fileName.endsWith(
                                                                     "/")
                                                         visible = !isFolder
@@ -2817,7 +2874,7 @@ Item {
                                                 background: Rectangle {
                                                     radius: 6
                                                     color: parent.hovered ? "#EFF6FF" : "#F0F9FF"
-                                                    border.color: parent.hovered ? "#3B82F6" : "transparent" // 移除默认边框
+                                                    border.color: parent.hovered ? "#3B82F6" : "transparent"
                                                     border.width: parent.hovered ? 1 : 0
                                                     layer.enabled: true
                                                     layer.effect: DropShadow {
@@ -2850,14 +2907,11 @@ Item {
                                                 }
                                                 onClicked: {
                                                     try {
-                                                        // console.log("下载按钮被点击，行:",
-                                                        //             row)
                                                         if (!tableView.model) {
                                                             console.error(
                                                                         "表格模型无效")
                                                             return
                                                         }
-                                                        // 总行数也是对的
                                                         const totalRows = tableView.model.rowCount()
                                                         // 4. 验证行是否在当前分页范围内（使用显示行索引）
                                                         if (!tableView.isValidRow(
@@ -2867,8 +2921,6 @@ Item {
                                                                         row)
                                                             return
                                                         }
-                                                        // 获取的 diaply 是该 row, 3 对应的 display 数据
-                                                        // 加上 model 才正确
                                                         var fileInfo = {
                                                             "id": "obj" + row,
                                                             "name": model.display
@@ -2910,15 +2962,16 @@ Item {
                                                                             fileInfo)
                                                             }
                                                         }
-                                                        // console.log("点击下载按钮选择项目:",
-                                                        //             fileInfo.name,
-                                                        //             "key:",
-                                                        //             fileInfo.key,
-                                                        //             "size:",
-                                                        //             fileInfo.size)
+                                                        // name 是名字, key 是路径加+名字
+                                                        console.log("点击下载按钮选择项目:",
+                                                                    fileInfo.name,
+                                                                    "key:",
+                                                                    fileInfo.key,
+                                                                    "size:",
+                                                                    fileInfo.size)
                                                         rootItem.addDownloadTask(
                                                                     fileInfo)
-                                                        downloadPanel.open()
+                                                        // downloadPanel.open()
                                                     } catch (e) {
                                                         console.error(
                                                                     "下载处理错误:",
@@ -3232,7 +3285,7 @@ Item {
                         // 这里没有执行?
                         // 缺少某些任务
                         // 1.0 的进度是完成任务
-                        console.log("更新下载进度:", jobId, progress)
+                        console.log("TEST 更新下载进度:", jobId, progress)
                         // 确保参数有效
                         if (!jobId || progress === undefined
                                 || progress === null) {
@@ -3257,6 +3310,9 @@ Item {
                                     downloadModel.setProperty(i, "speed", "")
                                     // 文本更新放到 downloadwindow 中
                                     // 缺少 localPath
+                                    console.log("下载完成并添加到历史模型中:", item.name,
+                                                "本地路径:", item.localPath)
+                                    // 添加的 name 也是没有问题的
                                     downloadHistoryModel.append({
                                                                     "name": item.name,
                                                                     "size": item.size,
@@ -3387,32 +3443,41 @@ Item {
             }
             resetPaginationOnFolderChange()
         })
+        // 一开始就初始化文件历史记录
+        initializeHistoryModels()
     }
     // 在 MainPage.qml 中的下载完成处理函数中添加
+    // 根本没有调用
     function handleDownloadCompleted(jobId) {
         // 查找对应的下载任务
         for (var i = 0; i < downloadModel.count; i++) {
             var item = downloadModel.get(i)
             if (item.jobId === jobId) {
+                // 第一个是 undefined
+                console.log("下载完成:", item.name, item.jobId)
                 // 保存到历史记录
                 if (ManagerGlobal && ManagerGlobal.getHistoryManager) {
+                    // 获取对象 obj
                     var historyManager = ManagerGlobal.getHistoryManager()
+                    // 插入语句
                     if (historyManager) {
                         var record = {
                             "jobId": item.jobId,
-                            "fileName": item.fileName,
+                            "fileName": item.name,
                             "fileSize": item.fileSize || 0,
                             "bucketName": item.bucketName,
-                            "objectKey": item.objectKey,
+                            "objectKey": item.key,
                             "localPath": item.localPath,
                             "status": "已完成",
-                            "startTime": item.startTime || Date.now(),
+                            "startTime"// "startTime": item.startTime || Date.now(),
+                            : item.startTime,
                             "completedTime": Date.now()
                         }
 
                         try {
                             historyManager.addDownloadRecord(record)
-                            console.log("下载历史保存成功:", item.fileName)
+                            // 但是这里成功了 ???
+                            console.log("下载历史保存成功:", item.name)
                         } catch (error) {
                             console.error("保存下载历史失败:", error)
                         }
@@ -3420,6 +3485,230 @@ Item {
                 }
                 break
             }
+        }
+    }
+    function handleFolderDoubleClick(row) {
+        try {
+            console.log("📁 处理文件夹双击，行:", row)
+
+            // 🔥 防止加载期间操作
+            if (loadingOverlay.active) {
+                console.log("⚠️ 正在加载中，忽略操作")
+                return
+            }
+
+            var rowData = {
+                "id": "obj" + row,
+                "name": ""
+            }
+
+            // 🔥 安全获取行数据
+            var currentObjectModel = tableView.model
+            if (!currentObjectModel) {
+                console.error("❌ 表格模型无效")
+                return
+            }
+
+            var indexCol0 = currentObjectModel.index(row, 0)
+            if (!indexCol0 || !indexCol0.valid) {
+                console.error("❌ 无法获取有效索引，行:", row)
+                return
+            }
+
+            // 🔥 获取显示名称
+            rowData.name = currentObjectModel.data(indexCol0,
+                                                   Qt.DisplayRole) || ""
+            if (!rowData.name) {
+                console.error("❌ 无法获取文件名")
+                return
+            }
+
+            // 🔥 获取详细数据
+            var userRoleDataMap = currentObjectModel.data(indexCol0,
+                                                          Qt.UserRole)
+            if (userRoleDataMap) {
+                rowData.isFolder = userRoleDataMap.isFolder
+                rowData.key = userRoleDataMap.key
+                rowData.size = userRoleDataMap.size
+                rowData.date = userRoleDataMap.lastModified
+            } else {
+                console.warn("⚠️ UserRole 数据缺失，使用备用方案")
+                rowData.isFolder = rowData.name.endsWith('/')
+                rowData.key = rowData.name
+            }
+
+            // 🔥 验证是否为文件夹
+            if (!rowData.isFolder) {
+                console.log("❌ 不是文件夹，忽略操作")
+                return
+            }
+
+            // 🔥 显示加载状态
+            const displayName = rowData.name.endsWith(
+                                  '/') ? rowData.name.substring(
+                                             0,
+                                             rowData.name.length - 1) : rowData.name
+            loadingOverlay.show("objects", `正在加载文件夹 ${displayName}...`)
+
+            // 🔥 构建导航路径
+            const keyToNavigate = rowData.key
+                                || (rowData.name.endsWith(
+                                        '/') ? rowData.name : rowData.name + '/')
+
+            console.log("📁 打开文件夹:", displayName, "路径:", keyToNavigate)
+
+            // 🔥 更新面包屑导航
+            breadcrumbNav.addPathItem(keyToNavigate, displayName)
+
+            // 🔥 重置分页状态
+            resetPaginationOnFolderChange()
+
+            // 🔥 清空选择
+            tableView.clearSelection()
+
+            // 🔥 延迟请求数据
+            Qt.callLater(function () {
+                if (rootItem.currentBucket) {
+                    ManagerGlobal.refreshObjects(rootItem.currentBucket,
+                                                 keyToNavigate)
+                } else {
+                    console.error("❌ 当前桶名无效")
+                    loadingOverlay.hide()
+                }
+            })
+        } catch (error) {
+            console.error("❌ 处理文件夹双击失败:", error)
+            loadingOverlay.hide()
+        }
+    }
+    // 🔥 添加历史记录初始化函数
+    function initializeHistoryModels() {
+        console.log("🔄 初始化历史记录模型...")
+
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            console.warn("⚠️ ManagerGlobal 或 HistoryManager 不可用，稍后重试...")
+            // 延迟重试
+            Qt.callLater(function () {
+                initializeHistoryModels()
+            })
+            return
+        }
+
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            console.warn("⚠️ 无法获取 HistoryManager 实例")
+            return
+        }
+
+        try {
+            loadDownloadHistoryToModel()
+            loadUploadHistoryToModel()
+            console.log("✅ 历史记录模型初始化完成")
+        } catch (error) {
+            console.error("❌ 初始化历史记录模型失败:", error)
+        }
+    }
+
+    function loadDownloadHistoryToModel() {
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            return
+        }
+
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            return
+        }
+
+        try {
+            downloadHistoryModel.clear()
+            var historyList = historyManager.getDownloadHistory(100)
+
+            console.log("📥 MainPage 从数据库获取到下载历史记录:", historyList.length, "条")
+
+            for (var i = 0; i < historyList.length; i++) {
+                var item = historyList[i]
+
+                var record = {
+                    "name": item.fileName || item.name || "未知文件",
+                    "size": typeof item.size === 'number' ? item.size : (parseInt(item.size)
+                                                                         || 0),
+                    "progress": 1.0,
+                    "jobId": item.jobId || "",
+                    "status": "已完成",
+                    "speed": "",
+                    "startTime": typeof item.startTime
+                                 === 'number' ? item.startTime : (parseInt(
+                                                                      item.startTime)
+                                                                  || 0),
+                    "lastUpdateTime": typeof item.completedTime
+                                      === 'number' ? item.completedTime : (parseInt(
+                                                                               item.completedTime)
+                                                                           || 0),
+                    "completedTime": typeof item.completedTime
+                                     === 'number' ? item.completedTime : (parseInt(
+                                                                              item.completedTime)
+                                                                          || 0),
+                    "bucketName": item.bucketName || "",
+                    "key": item.objectKey || "",
+                    "localPath": item.localPath || ""
+                }
+
+                downloadHistoryModel.append(record)
+            }
+
+            console.log("✅ MainPage 下载历史记录加载完成，记录数:",
+                        downloadHistoryModel.count)
+        } catch (error) {
+            console.error("❌ MainPage 加载下载历史失败:", error)
+        }
+    }
+    function loadUploadHistoryToModel() {
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            return
+        }
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            return
+        }
+
+        try {
+            uploadHistoryModel.clear()
+            var historyList = historyManager.getUploadHistory(100)
+            console.log("📥 MainPage 从数据库获取到上传历史记录:", historyList.length, "条")
+
+            for (var i = 0; i < historyList.length; i++) {
+                var item = historyList[i]
+                var record = {
+                    "name": item.fileName || item.name || "未知文件",
+                    "size": typeof item.size === 'number' ? item.size : (parseInt(item.size)
+                                                                         || 0),
+                    "progress": 1.0,
+                    "jobId": item.jobId || "",
+                    "status": "已完成",
+                    "speed": "",
+                    "startTime": typeof item.startTime
+                                 === 'number' ? item.startTime : (parseInt(
+                                                                      item.startTime)
+                                                                  || 0),
+                    "lastUpdateTime": typeof item.completedTime
+                                      === 'number' ? item.completedTime : (parseInt(
+                                                                               item.completedTime)
+                                                                           || 0),
+                    "completedTime": typeof item.completedTime
+                                     === 'number' ? item.completedTime : (parseInt(
+                                                                              item.completedTime)
+                                                                          || 0),
+                    "bucketName": item.bucketName || "",
+                    "key": item.objectKey || "",
+                    "localPath": item.localPath || ""
+                }
+
+                uploadHistoryModel.append(record)
+            }
+
+            console.log("✅ MainPage 上传历史记录加载完成，记录数:", uploadHistoryModel.count)
+        } catch (error) {
+            console.error("❌ MainPage 加载上传历史失败:", error)
         }
     }
 }

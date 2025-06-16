@@ -40,6 +40,7 @@ bool HistoryManager::addDownloadRecord(const QVariantMap &record) {
   }
 
   try {
+    // 插入语句
     QString sql = R"(
       INSERT OR REPLACE INTO download_history
       (job_id, file_name, file_size, bucket_name, object_key, local_path,
@@ -64,6 +65,7 @@ bool HistoryManager::addDownloadRecord(const QVariantMap &record) {
     emit downloadHistoryChanged();
     return true;
   } catch (const QString &error) {
+    // BUG 这里出现错误
     qWarning() << "添加下载记录失败:" << error;
     return false;
   }

@@ -86,11 +86,12 @@ private:
   void throwError(const std::string &code, qcloud_cos::CosResult &result);
 
 private:
-  qcloud_cos::CosConfig *m_config = nullptr;
+  QList<TtObject> getObjectsInternal(const std::string&bucketName, const std::string &dir);
+  QList<TtBucket> bucketsInternal();
 
+  qcloud_cos::CosConfig *m_config = nullptr;
   QMutex m_configMutex; // 保护配置访问的互斥锁
 
-  QList<TtObject> getObjectsInternal(const std::string&bucketName, const std::string &dir);
 };
 
 #endif // CLOUDSTC_H

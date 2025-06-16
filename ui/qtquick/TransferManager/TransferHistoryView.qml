@@ -164,6 +164,7 @@ ScrollView {
                         }
 
                         onClicked: {
+                            // 打开的文件不存在时, 显示对话框, 是否删除当前记录
                             console.log("打开文件位置: " + model.localPath)
                             fileLocationOpened(model.localPath)
                         }

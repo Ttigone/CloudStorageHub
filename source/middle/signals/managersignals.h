@@ -59,6 +59,19 @@ signals:
   void uploadSuccess(const std::string &jobId);
 
   void deleteObjectSuccess(const std::string &bucket, const std::string &key);
+
+  // 开始加载桶
+  void bucketsLoadingStarted();
+  // 完成加载桶
+    void bucketsLoadingFinished();
+    // 开始加载桶对象
+    void objectsLoadingStarted();
+    // 完成加载桶对象
+    void objectsLoadingFinished();
+
+    // 错误处理信号
+    void bucketsLoadingError(const QString &errorMessage);
+    void objectsLoadingError(const QString &errorMessage);
 };
 
 #endif // MANSIGNALS_H

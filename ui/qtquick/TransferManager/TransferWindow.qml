@@ -7,6 +7,7 @@ import QtQuick.Dialogs
 import "../Component"
 import QWindowKit
 
+// 上传历史没有加载
 Window {
     id: transferWindow
     title: "传输管理器"
@@ -15,23 +16,14 @@ Window {
     minimumWidth: 560
     minimumHeight: 400
 
-    // 模型属性 - 统一管理上传和下载
     property var uploadModel: null
     property var downloadModel: null
 
-    // property var uploadHistoryModel: null
-    // property var downloadHistoryModel: null
-    // 🔥 新增：历史记录模型 - 从数据库加载
-    property var downloadHistoryModel: Qt.createQmlObject(
-                                           'import QtQuick; ListModel {}',
-                                           transferWindow)
-    property var uploadHistoryModel: Qt.createQmlObject(
-                                         'import QtQuick; ListModel {}',
-                                         transferWindow)
+    property var uploadHistoryModel: null
+    property var downloadHistoryModel: null
 
     property int currentTab: 0 // 0:上传中, 1:上传历史, 2:下载中, 3:下载历史
 
-    // 活动任务计数
     property int activeUploads: 0
     property int activeDownloads: 0
 
@@ -42,14 +34,12 @@ Window {
     signal transferRetried(string jobId, string type)
     signal historyItemRemoved(string jobId, string type)
 
-    // 在 TransferWindow.qml 或相关组件中
     Connections {
         target: ManagerGlobal
 
         function onDownloadProgressUpdated(jobId, progress) {
             console.log("下载进度更新:", jobId, progress)
 
-            // 🔥 检查是否完成 (progress >= 1.0 表示完成)
             if (progress >= 1.0) {
                 // 从当前下载任务中获取信息
                 var taskInfo = getDownloadTaskInfo(jobId)
@@ -86,7 +76,6 @@ Window {
         }
     }
 
-    // 辅助函数：从模型中获取任务信息
     function getDownloadTaskInfo(jobId) {
         if (!downloadModel)
             return null
@@ -125,34 +114,71 @@ Window {
         return null
     }
 
+    function removeFileFromHistory(path) {
+        var removedCount = 0
+        try {
+            // 根据当前选项卡确定要删除的历史类型
+            if (currentTab === 1 && downloadHistoryModel) {
+                // 下载历史
+                for (var i = downloadHistoryModel.count - 1; i >= 0; i--) {
+                    var item = downloadHistoryModel.get(i)
+                    if (item && item.localPath === path) {
+                        console.log("删除下载历史项:", item.fileName || item.name)
+
+                        // 从数据库删除
+                        if (ManagerGlobal && ManagerGlobal.getHistoryManager) {
+                            var historyManager = ManagerGlobal.getHistoryManager()
+                            if (historyManager
+                                    && historyManager.removeDownloadRecord) {
+                                historyManager.removeDownloadRecord(item.jobId)
+                            }
+                        }
+
+                        // 从模型删除
+                        downloadHistoryModel.remove(i)
+                        removedCount++
+                    }
+                }
+            } else if (currentTab === 3 && uploadHistoryModel) {
+                // 上传历史
+                for (var i = uploadHistoryModel.count - 1; i >= 0; i--) {
+                    var item = uploadHistoryModel.get(i)
+                    if (item && item.localPath === path) {
+                        console.log("删除上传历史项:", item.fileName || item.name)
+
+                        // 从数据库删除
+                        if (ManagerGlobal && ManagerGlobal.getHistoryManager) {
+                            var historyManager = ManagerGlobal.getHistoryManager()
+                            if (historyManager
+                                    && historyManager.removeUploadRecord) {
+                                historyManager.removeUploadRecord(item.jobId)
+                            }
+                        }
+
+                        // 从模型删除
+                        uploadHistoryModel.remove(i)
+                        removedCount++
+                    }
+                }
+            }
+
+            if (removedCount > 0) {
+                console.log("✅ 成功删除", removedCount, "个历史记录")
+            } else {
+                console.warn("⚠️ 未找到要删除的历史记录")
+            }
+        } catch (error) {
+            console.error("❌ 删除历史记录失败:", error)
+        }
+    }
+
     Component.onCompleted: {
         windowAgent.setup(transferWindow)
         windowAgent.setWindowAttribute("dark-mode", true)
-
-        // 初始化模型（如果需要）
-        if (!uploadModel) {
-            uploadModel = Qt.createQmlObject('import QtQuick; ListModel {}',
-                                             transferWindow)
-        }
-        if (!downloadModel) {
-            downloadModel = Qt.createQmlObject('import QtQuick; ListModel {}',
-                                               transferWindow)
-        }
-        // if (!uploadHistoryModel) {
-        //     uploadHistoryModel = Qt.createQmlObject(
-        //                 'import QtQuick; ListModel {}', transferWindow)
-        // }
-        // if (!downloadHistoryModel) {
-        //     downloadHistoryModel = Qt.createQmlObject(
-        //                 'import QtQuick; ListModel {}', transferWindow)
-        // }
-        // 🔥 加载历史记录
-        loadDownloadHistory()
-        loadUploadHistory()
-
-        // 监听历史记录变化
+        console.log("传输窗口初始化, 开始加载历史记录")
+        // loadDownloadHistory()
+        // loadUploadHistory()
         connectHistorySignals()
-
         connectTransferCompletionSignals()
     }
 
@@ -423,7 +449,7 @@ Window {
                                 anchors.fill: parent
                                 onClicked: {
                                     currentTab = 1
-                                    loadDownloadHistory() // 切换时刷新
+                                    // loadDownloadHistory() // 切换时刷新
                                 }
                             }
 
@@ -483,7 +509,7 @@ Window {
                                 anchors.fill: parent
                                 onClicked: {
                                     currentTab = 3
-                                    loadUploadHistory() // 切换时刷新
+                                    // loadUploadHistory() // 切换时刷新
                                 }
                             }
 
@@ -534,6 +560,7 @@ Window {
                             removeDownloadHistory(jobId)
                         }
                         onFileLocationOpened: function (localPath) {
+                            // 下载历史
                             transferWindow.openFileLocation(localPath)
                         }
                     }
@@ -569,6 +596,7 @@ Window {
                             removeUploadHistory(jobId)
                         }
                         onFileLocationOpened: function (localPath) {
+                            // 上传历史
                             transferWindow.openFileLocation(localPath)
                         }
                     }
@@ -634,110 +662,114 @@ Window {
         }
     }
 
-    // 🔥 历史记录相关函数
     function loadDownloadHistory() {
         console.log("加载下载历史记录")
-        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
-            console.warn("HistoryManager 不可用")
-            return
-        }
+        // if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+        //     console.error("HistoryManager 不可用")
+        //     return
+        // }
 
-        var historyManager = ManagerGlobal.getHistoryManager()
-        if (!historyManager) {
-            console.warn("无法获取 HistoryManager 实例")
-            return
-        }
+        // var historyManager = ManagerGlobal.getHistoryManager()
+        // if (!historyManager) {
+        //     console.error("无法获取 HistoryManager 实例")
+        //     return
+        // }
 
-        try {
-            var history = historyManager.getDownloadHistory(100)
-            downloadHistoryModel.clear()
+        // try {
+        //     // 没有清楚方法
+        //     // downloadHistoryModel.clear()
+        //     var history = historyManager.getDownloadHistory(100)
 
-            for (var i = 0; i < history.length; i++) {
-                var item = history[i]
-                downloadHistoryModel.append({
-                                                "jobId": item.jobId || "",
-                                                "name": item.fileName || "未知文件",
-                                                "fileName": item.fileName
-                                                            || "未知文件",
-                                                "size": formatFileSize(
-                                                            item.fileSize)
-                                                        || "未知大小",
-                                                "fileSize": item.fileSize || 0,
-                                                "bucketName": item.bucketName
-                                                              || "",
-                                                "objectKey": item.objectKey
-                                                             || "",
-                                                "localPath": item.localPath
-                                                             || "",
-                                                "status": item.status || "已完成",
-                                                "startTime": item.startTime
-                                                             || 0,
-                                                "completedTime": item.completedTime
-                                                                 || 0,
-                                                "createdAt": item.createdAt
-                                                             || ""
-                                            })
-            }
-
-            console.log("加载下载历史完成，记录数:", downloadHistoryModel.count)
-        } catch (error) {
-            console.error("加载下载历史失败:", error)
-        }
+        //     // console.log("📥 从数据库获取到下载历史记录:", historyList.length, "条")
+        //     for (var i = 0; i < history.length; i++) {
+        //         var item = history[i]
+        //         var record = {
+        //             "jobId": item.jobId || "",
+        //             "name": item.fileName || item.name || "未知文件",
+        //             "fileName": item.fileName || item.name || "未知文件",
+        //             "size": typeof item.size === 'number' ? item.size : (parseInt(item.size)
+        //                                                                  || 0),
+        //             "fileSize": typeof item.fileSize
+        //                         === 'number' ? item.fileSize : (parseInt(
+        //                                                             item.fileSize)
+        //                                                         || 0),
+        //             "bucketName": item.bucketName || "",
+        //             "objectKey": item.objectKey || "",
+        //             "localPath": item.localPath || "",
+        //             "status": item.status || "已完成",
+        //             "startTime": typeof item.startTime
+        //                          === 'number' ? item.startTime : (parseInt(
+        //                                                               item.startTime)
+        //                                                           || 0),
+        //             "completedTime": typeof item.completedTime
+        //                              === 'number' ? item.completedTime : (parseInt(
+        //                                                                       item.completedTime)
+        //                                                                   || 0)
+        //         }
+        //         // 能够加载, 是从 MainPage 加载的, 而不是这里
+        //         // 没有 append 方法
+        //         // 这里有一个加载下载模型
+        //         // downloadHistoryModel.append(record)
+        //     }
+        //     console.log("加载历史完成")
+        //     // 也没有 count 方法
+        //     // console.log("加载下载历史完成，记录数:", downloadHistoryModel.count)
+        // } catch (error) {
+        //     console.error("加载下载历史失败:", error)
+        // }
     }
+    // function loadUploadHistory() {
+    //     console.log("加载上传历史记录")
+    //     if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+    //         return
+    //     }
 
-    function loadUploadHistory() {
-        console.log("加载上传历史记录")
-        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
-            return
-        }
+    //     var historyManager = ManagerGlobal.getHistoryManager()
+    //     if (!historyManager) {
+    //         return
+    //     }
 
-        var historyManager = ManagerGlobal.getHistoryManager()
-        if (!historyManager) {
-            return
-        }
+    //     try {
+    //         var history = historyManager.getUploadHistory(100)
+    //         uploadHistoryModel.clear()
 
-        try {
-            var history = historyManager.getUploadHistory(100)
-            uploadHistoryModel.clear()
+    //         for (var i = 0; i < history.length; i++) {
+    //             var item = history[i]
+    //             uploadHistoryModel.append({
+    //                                           "jobId": item.jobId || "",
+    //                                           "name": item.fileName || "未知文件",
+    //                                           "fileName": item.fileName
+    //                                                       || "未知文件",
+    //                                           "size": formatFileSize(
+    //                                                       item.fileSize)
+    //                                                   || "未知大小",
+    //                                           "fileSize": item.fileSize || 0,
+    //                                           "bucketName": item.bucketName
+    //                                                         || "",
+    //                                           "remotePath": item.remotePath
+    //                                                         || "",
+    //                                           "localPath": item.localPath || "",
+    //                                           "status": item.status || "已完成",
+    //                                           "startTime": item.startTime || 0,
+    //                                           "completedTime": item.completedTime
+    //                                                            || 0,
+    //                                           "createdAt": item.createdAt || ""
+    //                                       })
+    //         }
 
-            for (var i = 0; i < history.length; i++) {
-                var item = history[i]
-                uploadHistoryModel.append({
-                                              "jobId": item.jobId || "",
-                                              "name": item.fileName || "未知文件",
-                                              "fileName": item.fileName
-                                                          || "未知文件",
-                                              "size": formatFileSize(
-                                                          item.fileSize)
-                                                      || "未知大小",
-                                              "fileSize": item.fileSize || 0,
-                                              "bucketName": item.bucketName
-                                                            || "",
-                                              "remotePath": item.remotePath
-                                                            || "",
-                                              "localPath": item.localPath || "",
-                                              "status": item.status || "已完成",
-                                              "startTime": item.startTime || 0,
-                                              "completedTime": item.completedTime
-                                                               || 0,
-                                              "createdAt": item.createdAt || ""
-                                          })
-            }
+    //         console.log("加载上传历史完成，记录数:", uploadHistoryModel.count)
+    //     } catch (error) {
+    //         console.error("加载上传历史失败:", error)
+    //     }
+    // }
 
-            console.log("加载上传历史完成，记录数:", uploadHistoryModel.count)
-        } catch (error) {
-            console.error("加载上传历史失败:", error)
-        }
-    }
-
-    function refreshHistory() {
-        if (currentTab === 1) {
-            loadDownloadHistory()
-        } else if (currentTab === 3) {
-            loadUploadHistory()
-        }
-    }
-
+    // function refreshHistory() {
+    //     if (currentTab === 1) {
+    //         loadDownloadHistory()
+    //     } else if (currentTab === 3) {
+    //         loadUploadHistory()
+    //     }
+    // }
     function clearHistory() {
         if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
             return
@@ -841,8 +873,8 @@ Window {
                 try {
                     historyManager.downloadHistoryChanged.connect(
                                 loadDownloadHistory)
-                    historyManager.uploadHistoryChanged.connect(
-                                loadUploadHistory)
+                    // historyManager.uploadHistoryChanged.connect(
+                    //             loadUploadHistory)
                     console.log("历史记录信号连接成功")
                 } catch (error) {
                     console.warn("连接历史记录信号失败:", error)
@@ -850,25 +882,6 @@ Window {
             }
         }
     }
-
-    // function openFileLocation(localPath) {
-    //     console.log("传输窗口：尝试打开文件位置:", localPath)
-
-    //     if (!localPath || localPath === "") {
-    //         console.warn("文件路径为空")
-    //         return false
-    //     }
-
-    //     // 这里可以调用系统的文件管理器打开文件位置
-    //     // 或者调用 ManagerGlobal 的相关方法
-    //     var folderPath = localPath.substring(0, localPath.lastIndexOf('/'))
-    //     if (folderPath) {
-    //         console.log("文件夹路径:", folderPath)
-    //         // TODO: 调用系统文件管理器
-    //     } else {
-    //         console.warn("无法确定文件夹路径")
-    //     }
-    // }
 
     // 工具函数
     function formatFileSize(bytes) {
@@ -954,47 +967,78 @@ Window {
         console.log("打开传输设置")
     }
 
-    // function openFileLocation(localPath, fileName) {
     function openFileLocation(localPath) {
-        // console.log("打开文件位置:", localPath, fileName)
         console.log("传输窗口：尝试打开文件位置:", localPath)
-
         if (!localPath || localPath === "") {
-            showMessage("文件路径不存在: " + fileName)
-            fileLocationDialog.currentFolder = "file:///C:/" // 设置默认目录
-            fileLocationDialog.open()
+            console.warn("文件路径为空")
+            showMessage("文件路径不存在")
             return false
         }
-
-        // 检查文件是否存在
-        if (ManagerGlobal && ManagerGlobal.fileExists === "function") {
-            if (!ManagerGlobal.fileExists(localPath)) {
-                console.warn("文件不存在:", localPath)
-                // showMessage("文件不存在: " + localPath)
-                // 打开文件所在目录
-                // var folderPath = localPath.substring(0,
-                //                                      localPath.lastIndexOf('/'))
-                // if (folderPath) {
-                //     Qt.openUrlExternally("file:///" + folderPath.replace(/\\/g,
-                //                                                          '/'))
-                //     showMessage("已打开文件夹: " + folderPath)
-                // }
-                return false
-            }
-        } else {
-            // 调用的都是这个方法
+        if (checkFileExists(localPath)) {
             var folderPath = localPath.substring(0, localPath.lastIndexOf('/'))
             if (folderPath) {
-                Qt.openUrlExternally("file:///" + folderPath)
-                // showMessage("已打开文件夹: " + folderPath)
+                Qt.openUrlExternally("file:///" + folderPath.replace(/\\/g,
+                                                                     '/'))
+            }
+        } else {
+            var component = Qt.createComponent("../Component/MessageDialog.qml")
+            if (component.status === Component.Ready) {
+                var dialog = component.createObject(transferWindow, {
+                                                        "title": "文件不存在",
+                                                        "text": `文件 "${localPath}" 不存在。\n路径: ${localPath}\n\n是否从历史记录中删除此项？`,
+                                                        "showDeleteButton": true,
+                                                        "parentWindow": transferWindow
+                                                    })
+                dialog.x = (transferWindow.width - dialog.width) / 2
+                dialog.y = (transferWindow.height - dialog.height) / 2
+                var updatePosition = function () {
+                    if (dialog && transferWindow) {
+                        dialog.x = (transferWindow.width - dialog.width) / 2
+                        dialog.y = (transferWindow.height - dialog.height) / 2
+                    }
+                }
+                transferWindow.widthChanged.connect(updatePosition)
+                transferWindow.heightChanged.connect(updatePosition)
+                transferWindow.xChanged.connect(updatePosition)
+                transferWindow.yChanged.connect(updatePosition)
+
+                dialog.deleteRequested.connect(function () {
+                    // 删除记录
+                    removeDownloadHistory(localPath)
+                })
+
+                dialog.accepted.connect(function () {
+                    console.log("用户选择删除记录")
+                    removeFileFromHistory(localPath)
+                    dialog.destroy()
+                })
+
+                dialog.rejected.connect(function () {
+                    // 取消删除
+                    dialog.destroy()
+                })
+                dialog.show()
             } else {
-                console.warn("openFileLocation 方法不可用")
-                // showMessage("无法打开文件位置")
+                console.error("无法创建 MessageDialog:", component.errorString())
+                // showSimpleConfirmation(localPath, correctedPath)
             }
         }
     }
 
-    // 定时更新活动任务计数
+    function checkFileExists(filePath) {
+        try {
+            if (ManagerGlobal
+                    && typeof ManagerGlobal.fileExists === "function") {
+                return ManagerGlobal.fileExists(filePath)
+            } else {
+                console.error("无法调用检查文件存在的方法")
+            }
+        } catch (error) {
+            console.error("检查文件存在性失败", error)
+            return false
+        }
+    }
+
     Timer {
         interval: 1000
         running: true
@@ -1007,30 +1051,27 @@ Window {
 
     function connectTransferCompletionSignals() {
         if (ManagerGlobal) {
-            // 监听下载完成信号
             ManagerGlobal.downloadCompleted.connect(
                         function (jobId, fileName, bucketName, objectKey, localPath, fileSize, success) {
                             console.log("接收到下载完成信号:", jobId, fileName,
                                         "成功:", success)
 
                             if (success) {
-                                // 🔥 实时刷新下载历史（如果当前在历史页面）
                                 if (currentTab === 1) {
                                     Qt.callLater(loadDownloadHistory)
                                 }
                             }
                         })
 
-            // 监听上传完成信号
             ManagerGlobal.uploadCompleted.connect(
                         function (jobId, fileName, bucketName, remotePath, localPath, fileSize, success) {
                             console.log("接收到上传完成信号:", jobId, fileName,
                                         "成功:", success)
 
                             if (success) {
-                                // 🔥 实时刷新上传历史（如果当前在历史页面）
                                 if (currentTab === 3) {
-                                    Qt.callLater(loadUploadHistory)
+
+                                    // Qt.callLater(loadUploadHistory)
                                 }
                             }
                         })

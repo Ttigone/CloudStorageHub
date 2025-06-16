@@ -48,7 +48,6 @@ private:
   void initObjectsTable();
 
 private:
-  // 标准模型 可以给到 qml 使用 ???
   QStandardItemModel *m_modelBuckets = nullptr; // 存储桶表格模型
   QStandardItemModel *m_modelObjects = nullptr; // 对象表格模型
 };

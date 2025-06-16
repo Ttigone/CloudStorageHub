@@ -4,6 +4,7 @@
 #include "middle/models/cloudmodels.h"
 #include "middle/signals/managersignals.h"
 #include <QDebug>
+#include <QFutureWatcher>
 #include <QObject>
 
 /**
@@ -88,6 +89,15 @@ public:
    */
   std::string currentDir() const;
 
+  void getBucketsAsync();
+  void getObjectsAsync(const std::string &bucketName, const std::string &dir);
+
+private slots:
+  // 处理桶加载
+  void handleBucketsLoaded();
+  // 处理对象加载
+  void handleObjectsLoaded();
+
 private:
   /**
    * @brief 桶数据已经准备好，回传信号
@@ -95,9 +105,11 @@ private:
    */
   void bucketsAlready(const QList<TtBucket> &buckets);
 
-private:
   std::string m_currentBucketName; // 记录当前对象所在存储桶的位置
   std::string m_currentDir;        // 记录当前对象所在的父目录
+
+  QFutureWatcher<QList<TtBucket>> *m_bucketsWatcher;
+  QFutureWatcher<QList<TtObject>> *m_objectsWatcher;
 };
 
 #endif // MANBUCKETS_H

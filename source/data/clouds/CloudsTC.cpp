@@ -9,6 +9,8 @@
 #include "source/middle/models/cloudmodels.h"
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QtConcurrent>
+#include <config/errorcode.h>
 #include <cos_config.h>
 
 CloudsTC::CloudsTC() {
@@ -51,6 +53,17 @@ CloudsTC::CloudsTC() {
 CloudsTC::~CloudsTC() {
   delete m_config;
   m_config = nullptr;
+}
+
+QFuture<QList<TtObject>>
+CloudsTC::getObjectsAsync(const std::string &bucketName,
+                          const std::string &dir) {
+  return QtConcurrent::run([this, bucketName, dir]() {
+    return getObjectsInternal(bucketName, dir);
+  });
+}
+QFuture<QList<TtBucket>> CloudsTC::bucketsAsync() {
+  return QtConcurrent::run([this] { return bucketsInternal(); });
 }
 
 QList<TtBucket> CloudsTC::buckets() {
@@ -383,5 +396,58 @@ QList<TtObject> CloudsTC::getFileList(qcloud_cos::GetBucketResp &resp,
       res.append(object);
     }
   }
+  return res;
+}
+
+QList<TtObject> CloudsTC::getObjectsInternal(const std::string &bucketName,
+                                             const std::string &dir) {
+  // 获取桶内对象
+  QMutexLocker locker(&m_configMutex);
+
+  qcloud_cos::GetBucketReq req(bucketName);
+  if (dir != "") {
+    req.SetPrefix(dir);
+  }
+  req.SetDelimiter("/");
+
+  qcloud_cos::GetBucketResp resp;
+  std::string location = getBucketLocation(bucketName);
+  m_config->SetRegion(location);
+  qcloud_cos::CosAPI cos(*m_config);
+
+  qcloud_cos::CosResult result = cos.GetBucket(req, &resp);
+  if (!result.IsSucc()) {
+    throwError(EC_332000, result);
+  }
+  QList<TtObject> objs;
+  objs.append(getDirList(resp, dir));
+  objs.append(getFileList(resp, dir));
+
+  return objs;
+}
+
+QList<TtBucket> CloudsTC::bucketsInternal() {
+  // 获取桶列表
+  QMutexLocker locker(&m_configMutex);
+  qcloud_cos::GetServiceReq req;
+  qcloud_cos::GetServiceResp resp;
+  qcloud_cos::CosAPI cos = qcloud_cos::CosAPI(*m_config);
+
+  qcloud_cos::CosResult result = cos.GetService(req, &resp);
+  if (!result.IsSucc()) {
+    throwError(EC_331200, result);
+  }
+
+  QList<TtBucket> res;
+  std::vector<qcloud_cos::Bucket> bs = resp.GetBuckets();
+  for (std::vector<qcloud_cos::Bucket>::const_iterator it = bs.begin();
+       it != bs.end(); ++it) {
+    TtBucket bucket;
+    bucket.name = QString::fromStdString(it->m_name);
+    bucket.location = QString::fromStdString(it->m_location);
+    bucket.createDate = QString::fromStdString(it->m_create_date);
+    res.append(bucket);
+  }
+
   return res;
 }
