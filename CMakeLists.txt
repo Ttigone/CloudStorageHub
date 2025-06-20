@@ -41,6 +41,16 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 
+
+# if(MSVC)
+add_compile_options(/utf-8)
+add_compile_options(/Zc:__cplusplus)
+# endif()
+# if(MSVC)
+#   message("TEST UTF8")
+#     add_compile_options(/utf-8)
+# endif()
+
 set(PROJECT_CREATOR "C3H3_Ttigone" CACHE STRING "Creator of your project.") #Your project creator.
 
 set(PROJECT_LICENSE_TYPE "MIT" CACHE STRING "Project License Type.") #Your project license type.
@@ -351,8 +361,8 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
                 Qt${QT_VERSION_MAJOR}::Widgets
                 )
         elseif(${PROJECT_MAIN_TYPE} STREQUAL "qtquick")
-            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent)
-            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent)
+            find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent Widgets)
+            find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Quick Sql Core5Compat Concurrent Widgets)
             list(APPEND QT_MODULES Core${SPACE_ARG})
             list(APPEND QT_MODULES Quick${SPACE_ARG})
             list(APPEND QT_MODULES_LINK
@@ -360,6 +370,7 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
                 Qt${QT_VERSION_MAJOR}::Sql
                 Qt${QT_VERSION_MAJOR}::Core5Compat
                 Qt${QT_VERSION_MAJOR}::Concurrent
+                Qt${QT_VERSION_MAJOR}::Widgets
                 )
         endif()
     endif()
@@ -427,9 +438,10 @@ if(GUI_APPLICATION AND PROJECT_MAIN_TYPE STREQUAL "qt" OR PROJECT_MAIN_TYPE STRE
             target_link_libraries(${PROJECT_NAME} PUBLIC QWindowKit::Quick)
     endif()
 
+
+
     # 以下代码只有 msvc 能链接
     target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/cos-cpp-sdk-v5-5.5.17/include)
-    # target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/cos-cpp-sdk-v5-5.5.17/lib/Debug/)
     target_link_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/cos-cpp-sdk-v5-5.5.17/lib/Release/)
     target_link_libraries(${PROJECT_NAME} PRIVATE cossdk)
 
@@ -594,3 +606,6 @@ add_win_manifest(${PROJECT_NAME})
 
 # 添加测试用例
 add_subdirectory(source/test)
+add_subdirectory(external/qt-easy-logger-main/)
+target_link_libraries(${PROJECT_NAME} PUBLIC qt-easy-logger)
+target_include_directories(${PROJECT_NAME} PUBLIC external/qt-easy-logger-main)

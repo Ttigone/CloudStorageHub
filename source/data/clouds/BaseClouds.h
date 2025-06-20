@@ -81,7 +81,7 @@ public:
 
   ///
   /// @brief getObject 下载对象
-  /// @param bucket 桶命
+  /// @param bucket 桶名
   /// @param key 云对象的路径
   /// @param localPath 本地路径
   /// @param callback 回调函数
@@ -89,6 +89,14 @@ public:
   virtual void getObject(const std::string &bucket, const std::string &key,
                          const std::string &localPath,
                          const TransProgressCallback &callback) = 0;
+
+  ///
+  /// @brief deleteObject 删除对象
+  /// @param bucket 桶名
+  /// @param key 云对象路径
+  ///
+  virtual void deleteObject(const std::string &bucket,
+                            const std::string &key) = 0;
 };
 
 #endif // BASECLOUDS_H

@@ -19,7 +19,6 @@ public:
   // 获取对象数据
   QStandardItemModel *modelObjects() const;
 
-private slots:
   /**
    * @brief 设置存储桶显示(函数实现)
    * @param buckets 桶数据列表
@@ -30,6 +29,11 @@ private slots:
    * @brief 设置对象显示(函数实现)
    * @param objects 对象数据列表
    */
+
+  ///
+  /// @brief setObjects 设置对象显示
+  /// @param objects
+  ///
   void setObjects(const QList<TtObject> &objects);
 
 private:

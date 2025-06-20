@@ -4,12 +4,32 @@
         <file>LoginDialog.qml</file>
         <file>MainPage.qml</file>
         <file>PreferencesDialog.qml</file>
+        <file>DownloadHistoryView.qml</file>
+        <file>DownloadListView.qml</file>
+        <file>DownloadWindow.qml</file>
+        <file>LoadingOverlay.qml</file>
         <file>Component/QWKButton.qml</file>
         <file>Component/FramelessWindow.qml</file>
         <file>Component/TtTextField.qml</file>
         <file>Component/HistoryTextField.qml</file>
         <file>Component/TtMenu.qml</file>
         <file>Component/TtSplitView.qml</file>
+        <file>Component/TtBreadcrumbNav.qml</file>
+        <file>Component/TtPaginationNav.qml</file>
+        <file>Component/TtScrollBar.qml</file>
+        <file>Component/ObjectModel.qml</file>
+        <file>Component/PaginationProxyModel.qml</file>
+        <file>Component/DownloadPanel.qml</file>
+        <file>Component/TtProgressBar.qml</file>
+        <file>Component/TtToolTip.qml</file>
+        <file>Component/TtNotification.qml</file>
+        <file>Component/FileUpLoadDialog.qml</file>
+        <file>Component/MessageDialog.qml</file>
+        <file>Component/notification/TtDesktopNotification.qml</file>
+        <file>Component/notification/TtDesktopNotificationManager.qml</file>
+        <file>TransferManager/TransferWindow.qml</file>
+        <file>TransferManager/TransferListView.qml</file>
+        <file>TransferManager/TransferHistoryView.qml</file>
     </qresource>
     <qresource prefix="/">
         <file>resources/window-bar/close.svg</file>

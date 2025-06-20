@@ -105,3 +105,9 @@ void CloudsMock::getObject(const std::string &bucket, const std::string &key,
   Q_UNUSED(localPath);
   Q_UNUSED(callback);
 }
+
+void CloudsMock::deleteObject(const std::string &bucket,
+                              const std::string &key) {
+  Q_UNUSED(bucket);
+  Q_UNUSED(key);
+}

@@ -6,8 +6,6 @@
 #include <memory>
 
 ConfigManager::ConfigManager(QObject* parent)
-    // : QObject(parent), m_settings("CloudStorageHub", "LoginConfig"),
-    // m_secretId(""), m_secretKey(""), m_remark(""), m_rememberSession(false)
     : QObject(parent), m_secretId(""), m_secretKey(""), m_remark(""),
       m_rememberSession(false)
 {

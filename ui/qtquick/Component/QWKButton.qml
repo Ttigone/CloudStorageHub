@@ -12,7 +12,11 @@ Button {
     topInset: 0
     rightInset: 0
     bottomInset: 0
+
+    activeFocusOnTab: false
+    focusPolicy: Qt.NoFocus
     property alias source: image.source
+
     contentItem: Item {
         Image {
             id: image
@@ -26,15 +30,15 @@ Button {
     background: Rectangle {
         color: {
             if (!root.enabled) {
-                return "gray";
+                return "gray"
             }
             if (root.pressed) {
-                return Qt.rgba(0, 0, 0, 0.15);
+                return Qt.rgba(0, 0, 0, 0.15)
             }
             if (root.hovered) {
-                return Qt.rgba(0, 0, 0, 0.15);
+                return Qt.rgba(0, 0, 0, 0.15)
             }
-            return "transparent";
+            return "transparent"
         }
     }
 }

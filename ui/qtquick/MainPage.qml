@@ -3,56 +3,1214 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import QtQml.Models
-import Qt.labs.qmlmodels
+import QtQml
+import Qt5Compat.GraphicalEffects
 
 import "./Component"
+import "./Component/notification"
 
+// 后端的 model 以赋值形式填入, 始终都是值更新, 没办法捕获底层的 model 是否改变, 赋值给代理模型, 代理模型不知道是否改变
 Item {
     id: rootItem
     anchors.fill: parent
+    property var columnWidths: [300, 150, 150, 100] // 名称、大小、日期、操作按钮区
+    property int currentPerPage: 20
+    property ListModel downloadModel: ListModel {}
+    property var paginationProxy: null
+    // // 添加一个属性来存储当前面包屑路径
+    property var breadcrumbPathData: []
+    property var transferWindow: null
 
-    property var columnWidths: [30, 270, 150, 150] // 图标、名称、地区、日期
-    function getIconForFolder(type) {
-        switch (type) {
-        case "folder":
-            return "📁"
-        case "image":
-            return "🖼️"
-        case "doc":
-            return "📄"
-        case "video":
-            return "🎬"
-        case "audio":
-            return "🎵"
-        case "misc":
-            return "📦"
-        default:
-            return "📁"
+    property var originalBucketModel: null
+    property var originalObjectModel: null
+    function getBucketCompletionData() {
+        if (!tableView.inBucketMode) {
+            return []
+        }
+
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.warn("无法获取桶模型")
+                return []
+            }
+
+            var completions = []
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var bucketName = bucketModel.data(index, Qt.DisplayRole) || ""
+                if (bucketName) {
+                    completions.push(bucketName)
+                }
+            }
+
+            console.log("获取到桶补全数据:", completions.length, "个桶")
+            return completions
+        } catch (error) {
+            console.error("获取桶补全数据失败:", error)
+            return []
         }
     }
 
-    function getFileIcon(file) {
-        if (file.isFolder)
-            return "📁"
-        switch (file.type) {
-        case "文档":
-            return "📄"
-        case "幻灯片":
-            return "📊"
-        case "图片":
-            return "🖼️"
-        case "视频":
-            return "🎬"
-        case "音频":
-            return "🎵"
-        default:
-            return "📄"
+    function getFileCompletionData() {
+        if (tableView.inBucketMode) {
+            return []
+        }
+
+        try {
+            var objectModel = ManagerGlobal.getObjectsModel()
+            if (!objectModel) {
+                console.warn("无法获取对象模型")
+                return []
+            }
+
+            var completions = []
+            for (var i = 0; i < objectModel.rowCount(); i++) {
+                var index = objectModel.index(i, 0)
+                var objectName = objectModel.data(index, Qt.DisplayRole) || ""
+                if (objectName) {
+                    completions.push(objectName)
+                }
+            }
+
+            console.log("获取到文件补全数据:", completions.length, "个文件")
+            return completions
+        } catch (error) {
+            console.error("获取文件补全数据失败:", error)
+            return []
         }
     }
 
-    // 在 TableView 中添加排序函数
+    function updateCompletionModel() {
+        try {
+            var newCompletions
+            if (tableView.inBucketMode) {
+                newCompletions = getBucketCompletionData()
+            } else {
+                newCompletions = getFileCompletionData()
+            }
+
+            // 更新搜索框的补全模型
+            searchField.completionModel = newCompletions
+            console.log("补全模型已更新:", newCompletions.length, "项")
+        } catch (error) {
+            console.error("更新补全模型失败:", error)
+        }
+    }
+    function performSearch(query) {
+        if (!query || query.trim() === "") {
+            resetSearch()
+            return
+        }
+        if (tableView.inBucketMode) {
+            // 搜索桶
+            searchBuckets(query)
+        } else {
+            // 搜索对象
+            searchObjects(query)
+        }
+    }
+
+    function searchBuckets(query) {
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.error("❌ 无法获取桶模型")
+                return
+            }
+
+            // 保存原始模型（如果还没保存）
+            if (!originalBucketModel) {
+                originalBucketModel = bucketModel
+            }
+
+            console.log("🔍 在", bucketModel.rowCount(), "个桶中搜索:", query)
+
+            // 创建过滤后的结果
+            var filteredResults = []
+            var queryLower = query.toLowerCase()
+
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var bucketName = bucketModel.data(index, Qt.DisplayRole) || ""
+
+                if (bucketName.toLowerCase().indexOf(queryLower) !== -1) {
+                    filteredResults.push({
+                                             "name": bucketName,
+                                             "zone": bucketModel.data(
+                                                         bucketModel.index(i,
+                                                                           1),
+                                                         Qt.DisplayRole) || "",
+                                             "createTime": bucketModel.data(
+                                                               bucketModel.index(
+                                                                   i, 2),
+                                                               Qt.DisplayRole)
+                                                           || ""
+                                         })
+                }
+            }
+
+            console.log("🔍 找到", filteredResults.length, "个匹配的桶")
+
+            // 应用过滤结果
+            applyBucketSearchResults(filteredResults)
+        } catch (error) {
+            console.error("❌ 搜索桶时出错:", error)
+        }
+    }
+    function applyBucketSearchResults(results) {
+        try {
+            // 这里需要根据您的模型实现来调整
+            // 如果您的模型支持过滤，可以设置过滤器
+            // 否则可能需要创建临时模型或通知后端进行过滤
+            // showSuccessMessage(`找到 ${results.length} 个匹配的桶`, "搜索结果", 2000)
+            // 如果您的 C++ 模型支持过滤，可以这样调用：
+            if (ManagerGlobal.setBucketFilter) {
+                ManagerGlobal.setBucketFilter(searchField.text)
+            }
+        } catch (error) {
+            console.error("❌ 应用桶搜索结果时出错:", error)
+        }
+    }
+    function resetSearch() {
+        console.log("🔄 重置搜索")
+
+        try {
+            if (tableView.inBucketMode) {
+                // 重置桶搜索
+                if (ManagerGlobal.clearBucketFilter) {
+                    ManagerGlobal.clearBucketFilter()
+                } else {
+                    // 如果没有过滤方法，重新加载数据
+                    ManagerGlobal.refreshBuckets()
+                }
+            } else {
+                // 重置对象搜索
+                if (ManagerGlobal.clearObjectFilter) {
+                    ManagerGlobal.clearObjectFilter()
+                } else {
+                    // 重新加载当前路径的对象
+                    var currentPath = breadcrumbNav.getCurrentPath()
+                    if (currentPath && currentPath !== rootItem.currentBucket) {
+                        ManagerGlobal.refreshObjects(rootItem.currentBucket,
+                                                     currentPath)
+                    } else {
+                        ManagerGlobal.refreshObjects(rootItem.currentBucket)
+                    }
+                }
+            }
+
+            // 重置分页
+            resetPaginationOnFolderChange()
+        } catch (error) {
+            console.error("❌ 重置搜索时出错:", error)
+        }
+    }
+
+    onSearchRequested: function (query) {
+        performSearch(query)
+    }
+
+    signal uploadRequested
+    // 内部发出下载信号
+    signal downloadRequested(var selectedItems)
+    // 搜索信号
+    signal searchRequested(string query)
+    signal folderSelected(string folderId)
+    // 登出信号
+    signal logoutRequested
+    signal updateCurrentBucket(string bucketName)
+
+    // 初始化完成：
+    signal initializationCompleted
+
+    // 暴露的属性和信号
+    property var folderModel: [] // 文件夹模型数据
+    property var fileModel: [] // 文件模型数据
+
+    property int sortColumn: -1 // -1表示未排序，0,1,2,3对应不同列
+    property bool sortAscending: true // true为升序，false为降序
+    property string currentBucket: "" // 当前选中的存储桶
+
+    property int currentRecordCount: updateRecordCount()
+    property int currentPage: 1
+
+    property ListModel uploadModel: ListModel {}
+    property ListModel uploadHistoryModel: ListModel {}
+    property var fileUploadDialog: null
+    property var uploadPanel: null
+
+    TtDesktopNotificationManager {
+        id: notificationManager
+        anchors.fill: parent
+        z: 2000 // 确保在最顶层
+        position: "topRight"
+        maxNotifications: 5
+
+        Connections {
+            target: rootItem.Window.window
+
+            function onWidthChanged() {
+                // 窗口宽度变化时立即更新通知位置
+                if (notificationManager.activeNotifications.length > 0) {
+                    // console.log("主窗口宽度变化，更新通知位置")
+                    Qt.callLater(function () {
+                        notificationManager.updateAllNotificationXPositions()
+                    })
+                }
+            }
+
+            function onHeightChanged() {
+                // 窗口高度变化时更新通知位置
+                if (notificationManager.activeNotifications.length > 0) {
+                    // console.log("主窗口高度变化，更新通知位置")
+                    Qt.callLater(function () {
+                        notificationManager.updateAllNotificationPositions()
+                    })
+                }
+            }
+        }
+
+        // 🔥 监听自身几何变化
+        onWidthChanged: {
+            if (activeNotifications.length > 0) {
+                // console.log("通知管理器宽度变化:", width)
+            }
+        }
+
+        onHeightChanged: {
+            if (activeNotifications.length > 0) {
+                // console.log("通知管理器高度变化:", height)
+            }
+        }
+
+        Component.onCompleted: {
+            // console.log("通知管理器初始化完成")
+        }
+    }
+
+    Dialog {
+        id: deleteBucketDialog
+
+        property string bucketToDelete: ""
+
+        title: "确认删除桶"
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+
+        anchors.centerIn: parent
+
+        width: 450
+        height: 260
+
+        background: Rectangle {
+            color: "#FFFFFF"
+            radius: 8
+            border.color: "#E0E0E0"
+            border.width: 1
+
+            layer.enabled: true
+            layer.effect: DropShadow {
+                horizontalOffset: 0
+                verticalOffset: 4
+                radius: 8
+                samples: 16
+                color: "#40000000"
+            }
+        }
+
+        contentItem: Rectangle {
+            color: "transparent"
+
+            ColumnLayout {
+                anchors {
+                    fill: parent
+                    margins: 24 // 增加边距
+                }
+                spacing: 20
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    width: 64
+                    height: 64
+                    radius: 32
+                    color: "#FEE2E2"
+                    border.color: "#FECACA"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚠️"
+                        font.pixelSize: 32
+                    }
+
+                    SequentialAnimation on scale {
+                        running: deleteBucketDialog.visible
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: 1.0
+                            to: 1.1
+                            duration: 1000
+                            easing.type: Easing.InOutQuad
+                        }
+                        NumberAnimation {
+                            from: 1.1
+                            to: 1.0
+                            duration: 1000
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: parent.width - 48 // 确保不超出边界
+                    text: `确定要删除桶 "${deleteBucketDialog.bucketToDelete}" 吗？`
+                    font.pixelSize: 18
+                    font.weight: Font.Medium
+                    color: "#1F2937"
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    lineHeight: 1.3
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: warningText.contentHeight + 16
+                    color: "#FEF2F2"
+                    radius: 8
+                    border.color: "#FECACA"
+                    border.width: 1
+
+                    Text {
+                        id: warningText
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        text: "⚠️ 删除后将无法恢复，请确保桶内没有重要数据！"
+                        font.pixelSize: 14
+                        color: "#DC2626"
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        lineHeight: 1.4
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 10
+                }
+            }
+        }
+
+        footer: Rectangle {
+            height: 60
+            color: "#F9FAFB"
+            radius: 8
+
+            RowLayout {
+                anchors {
+                    fill: parent
+                    margins: 16
+                }
+                spacing: 12
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                // 取消按钮
+                Button {
+                    text: "取消"
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 36
+
+                    background: Rectangle {
+                        color: parent.hovered ? "#F3F4F6" : "#FFFFFF"
+                        border.color: "#D1D5DB"
+                        border.width: 1
+                        radius: 6
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#374151"
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: deleteBucketDialog.reject()
+                }
+
+                // 确认删除按钮
+                Button {
+                    text: "删除"
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 36
+
+                    background: Rectangle {
+                        color: parent.hovered ? "#DC2626" : "#EF4444"
+                        radius: 6
+
+                        // 🔥 添加按钮按下效果
+                        scale: parent.pressed ? 0.95 : 1.0
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                            }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#FFFFFF"
+                        font.pixelSize: 14
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: deleteBucketDialog.accept()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        // onAccepted: {
+        //     console.log("✅ 确认删除桶:", bucketToDelete)
+        //     if (bucketToDelete && bucketToDelete !== "") {
+        //         ManagerGlobal.deleteBucket(bucketToDelete)
+        //         showSuccessMessage(`桶 ${bucketToDelete} 删除请求已发送`, "删除操作", 3000)
+        //     }
+        //     bucketToDelete = ""
+        // }
+        onAccepted: {
+            console.log("✅ 确认删除桶:", bucketToDelete)
+            if (bucketToDelete && bucketToDelete !== "") {
+                // 显示删除进度
+                loadingOverlay.show("正在删除存储桶 " + bucketToDelete + "...")
+
+                ManagerGlobal.deleteBucket(bucketToDelete)
+                showSuccessMessage(`桶 ${bucketToDelete} 删除请求已发送`, "删除操作", 3000)
+            }
+            bucketToDelete = ""
+        }
+
+        onRejected: {
+            console.log("取消删除桶操作")
+            bucketToDelete = ""
+        }
+
+        enter: Transition {
+            NumberAnimation {
+                properties: "opacity,scale"
+                from: 0
+                to: 1
+                duration: 200
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                properties: "opacity,scale"
+                from: 1
+                to: 0
+                duration: 150
+                easing.type: Easing.InQuad
+            }
+        }
+    }
+
+    function showDeleteBucketConfirmation(bucketName) {
+        if (!bucketName || bucketName === "") {
+            console.error("❌ 桶名为空，无法显示删除确认对话框")
+            return
+        }
+
+        console.log("📋 显示删除确认对话框，桶名:", bucketName)
+        deleteBucketDialog.bucketToDelete = bucketName
+        deleteBucketDialog.open()
+    }
+
+    Connections {
+        target: ManagerGlobal
+        function onObjectsLoadingChanged() {
+            if (ManagerGlobal.isObjectsLoading) {
+                loadingOverlay.show("objects", "正在加载文件列表...")
+            } else {
+                loadingOverlay.hide()
+            }
+        }
+        function onBucketsLoadingChanged() {
+            if (ManagerGlobal.isBucketsLoading) {
+                loadingOverlay.show("buckets", "正在加载存储桶...")
+            } else {
+                loadingOverlay.hide()
+            }
+        }
+    }
+
+    // 🔥 快捷通知方法
+    // function showSuccessMessage(message, title, duration) {
+    //     rootItem.notificationManager.showSuccess(title || "操作成功", message,
+    //                                              duration || 3000)
+    // }
+    // 🔥 修复快捷通知方法 - 添加安全检查
+    function showSuccessMessage(message, title, duration) {
+        console.log("🔔 尝试显示成功消息:", message)
+
+        // 安全检查
+        if (!notificationManager) {
+            console.error("❌ 通知管理器未初始化")
+            return
+        }
+
+        if (typeof notificationManager.showSuccess !== "function") {
+            console.error("❌ showSuccess 方法不存在")
+            return
+        }
+
+        try {
+            notificationManager.showSuccess(title || "操作成功", message,
+                                            duration || 3000, true)
+            console.log("✅ 成功显示通知")
+        } catch (error) {
+            console.error("❌ 显示通知失败:", error)
+        }
+    }
+
+    Connections {
+        target: ManagerGlobal
+
+        function onDownloadCompleted(jobId, fileName, bucketName, objectKey, localPath, fileSize, success) {
+            console.log("✅ 接收到下载完成信号:", jobId, fileName, "成功:", success)
+            showSuccessMessage("下载任务已完成: " + fileName, "下载完成", 3000)
+            // 更新下载模型中的任务状态
+            for (var i = 0; i < downloadModel.count; i++) {
+                var item = downloadModel.get(i)
+                if (item && item.jobId === jobId) {
+                    downloadModel.setProperty(i, "status",
+                                              success ? "已完成" : "错误")
+                    downloadModel.setProperty(i, "progress",
+                                              success ? 1.0 : item.progress)
+
+                    if (fileName && fileName !== "downloaded_file.txt") {
+                        downloadModel.setProperty(i, "fileName", fileName)
+                        downloadModel.setProperty(i, "name", fileName)
+                    }
+
+                    if (typeof fileSize === 'number' && fileSize > 0) {
+                        downloadModel.setProperty(i, "size", fileSize)
+                        downloadModel.setProperty(i, "fileSize", fileSize)
+                    }
+
+                    downloadModel.setProperty(i, "completedTime",
+                                              new Date().getTime())
+
+                    if (success) {
+                        console.log("🔄 开始保存下载历史记录...")
+                        // 保存历史记录
+                        ManagerGlobal.saveDownloadToHistory(jobId, fileName,
+                                                            bucketName,
+                                                            objectKey,
+                                                            localPath, fileSize)
+                    }
+                    break
+                }
+            }
+        }
+        function onDownloadProgressUpdated(jobId, progress) {
+            console.log("更新下载进度:", jobId, progress)
+
+            for (var i = 0; i < downloadModel.count; i++) {
+                var item = downloadModel.get(i)
+                if (item && item.jobId === jobId) {
+                    var numericProgress = typeof progress === 'number' ? progress : parseFloat(
+                                                                             progress)
+                    downloadModel.setProperty(i, "progress", numericProgress)
+
+                    if (numericProgress >= 1.0) {
+                        downloadModel.setProperty(i, "status", "已完成")
+                        console.log("更新下载进度完成, 100%")
+                        handleDownloadCompleted(jobId)
+                    } else {
+                        downloadModel.setProperty(i, "status", "下载中")
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    onUpdateCurrentBucket: function (bucketName) {
+        console.log("更新当前桶", bucketName)
+        rootItem.currentBucket = bucketName
+    }
+    function openTransferManager() {
+        console.log("打开传输管理窗口")
+
+        if (!transferWindow) {
+            var component = Qt.createComponent(
+                        "qrc:/ui/TransferManager/TransferWindow.qml")
+            if (component.status === Component.Ready) {
+                transferWindow = component.createObject(rootItem)
+                transferWindow.uploadModel = rootItem.uploadModel
+                transferWindow.downloadModel = rootItem.downloadModel
+                transferWindow.uploadHistoryModel = rootItem.uploadHistoryModel
+                transferWindow.downloadHistoryModel = rootItem.downloadHistoryModel
+                Qt.callLater(function () {
+                    if (transferWindow.loadDownloadHistory) {
+                        transferWindow.loadDownloadHistory()
+                    }
+                    if (transferWindow.loadUploadHistory) {
+                        transferWindow.loadUploadHistory()
+                    }
+                })
+
+                transferWindow.transferPaused.connect(function (jobId, type) {
+                    console.log("暂停传输:", jobId, type)
+                    if (type === "upload") {
+                        ManagerGlobal.pauseUpload(jobId)
+                    } else {
+                        ManagerGlobal.pauseDownload(jobId)
+                    }
+                })
+
+                transferWindow.transferResumed.connect(function (jobId, type) {
+                    console.log("恢复传输:", jobId, type)
+                    if (type === "upload") {
+                        ManagerGlobal.resumeUpload(jobId)
+                    } else {
+                        ManagerGlobal.resumeDownload(jobId)
+                    }
+                })
+
+                transferWindow.transferCancelled.connect(
+                            function (jobId, type) {
+                                console.log("取消传输:", jobId, type)
+                                if (type === "upload") {
+                                    ManagerGlobal.cancelUpload(jobId)
+                                } else {
+                                    ManagerGlobal.cancelDownload(jobId)
+                                }
+                            })
+
+                transferWindow.transferRetried.connect(function (jobId, type) {
+                    console.log("重试传输:", jobId, type)
+                    if (type === "upload") {
+                        ManagerGlobal.retryUpload(jobId)
+                    } else {
+                        ManagerGlobal.retryDownload(jobId)
+                    }
+                })
+
+                transferWindow.historyItemRemoved.connect(
+                            function (jobId, type) {
+                                console.log("删除历史记录:", jobId, type)
+                                // 从对应的历史模型中删除项目
+                                var model = type === "upload" ? transferWindow.uploadHistoryModel : transferWindow.downloadHistoryModel
+                                for (var i = 0; i < model.count; i++) {
+                                    if (model.get(i).jobId === jobId) {
+                                        model.remove(i)
+                                        break
+                                    }
+                                }
+                            })
+
+                // 窗口关闭时清理
+                transferWindow.onClosing.connect(function () {
+                    transferWindow = null
+                })
+            } else {
+                console.error("创建传输管理窗口失败:", component.errorString())
+                return
+            }
+        }
+
+        if (transferWindow) {
+            transferWindow.uploadModel = rootItem.uploadModel
+            transferWindow.downloadModel = rootItem.downloadModel
+            // 如果历史记录模型为空，重新加载
+            if (transferWindow.downloadHistoryModel
+                    && transferWindow.downloadHistoryModel.count === 0) {
+                Qt.callLater(function () {
+                    if (transferWindow.loadDownloadHistory) {
+                        // 调用空方法
+                        transferWindow.loadDownloadHistory()
+                    }
+                })
+            }
+            transferWindow.show()
+            transferWindow.raise()
+            transferWindow.requestActivate()
+            console.log("传输管理窗口已打开")
+        }
+    }
+
+    onUploadRequested: {
+        openFileUploadDialog()
+    }
+
+    function getCurrentPath() {
+        if (breadcrumbNav
+                && typeof breadcrumbNav.getCurrentPath === "function") {
+            return breadcrumbNav.getCurrentPath()
+        }
+        return ""
+    }
+
+    // 创建文件上传对话框
+    function openFileUploadDialog() {
+        if (!fileUploadDialog) {
+            var component = Qt.createComponent(
+                        "qrc:/ui/Component/FileUpLoadDialog.qml")
+            if (component.status === Component.Ready) {
+                fileUploadDialog = component.createObject(rootItem)
+                fileUploadDialog.uploadRequested.connect(
+                            function (uploadTasks) {
+                                processUploadTasks(uploadTasks)
+                                fileUploadDialog.close()
+                            })
+                fileUploadDialog.cancelled.connect(function () {
+                    fileUploadDialog.close()
+                })
+            } else {
+                console.error("创建文件上传对话框失败:", component.errorString())
+                return
+            }
+        }
+        // 设置当前桶信息
+        if (currentBucket) {
+            fileUploadDialog.targetBucket = currentBucket
+        }
+        // BUG 获取的路径不全的`
+        var currentPath = breadcrumbNav.getPath()
+        // 获取的路径还是最后一个
+        console.log("当前路径:", currentPath)
+        if (currentPath && currentPath !== "all" && currentPath !== "") {
+            fileUploadDialog.targetPath = currentPath
+        }
+        if (ManagerGlobal && ManagerGlobal.getBucketNames) {
+            fileUploadDialog.bucketList = ManagerGlobal.getBucketNames()
+        }
+        fileUploadDialog.open()
+    }
+
+    function handleOpenBucket(bucketName) {
+        switchToObjectsModel(bucketName)
+        breadcrumbNav.clearModel(bucketName)
+        breadcrumbNav.addPathItem(bucketName, bucketName)
+    }
+
+    // 处理上传任务
+    function processUploadTasks(uploadTasks) {
+        console.log("处理上传任务:", uploadTasks.length, "个文件")
+        for (var i = 0; i < uploadTasks.length; i++) {
+            var task = uploadTasks[i]
+            addUploadTask(task)
+        }
+    }
+
+    // 添加上传任务到模型
+    function addUploadTask(taskInfo) {
+        let timestamp = new Date().getTime()
+        let random = Math.floor(Math.random() * 10000)
+        let jobId = `upload_${timestamp}_${random}`
+        // 文件名正确
+        console.log("添加上传任务:", taskInfo.fileName)
+        // 添加正确
+        uploadModel.append({
+                               "jobId": jobId,
+                               "fileName": taskInfo.fileName,
+                               "localPath": taskInfo.localPath,
+                               "bucket": taskInfo.bucket,
+                               "remotePath": taskInfo.remotePath,
+                               "status": "待上传",
+                               "progress": 0,
+                               "startTime": timestamp,
+                               "speed": 0,
+                               "size": taskInfo.fileSize || 0
+                           })
+        startUploadTask(jobId, taskInfo)
+    }
+
+    // 开始上传任务
+    function startUploadTask(jobId, taskInfo) {
+        console.log("开始上传任务:", jobId)
+        updateUploadStatus(jobId, "上传中")
+        var remoteKey = taskInfo.remotePath ? taskInfo.remotePath + '/'
+                                              + taskInfo.fileName : taskInfo.fileName
+        // console.log("远程上传路径:", remoteKey)
+        // 上传成功
+        if (ManagerGlobal && ManagerGlobal.uploadFile) {
+            ManagerGlobal.uploadFile(jobId, taskInfo.bucket, remoteKey,
+                                     taskInfo.localPath)
+        } else {
+            console.error("上传方法不可用")
+            updateUploadStatus(jobId, "错误")
+        }
+    }
+
+    function updateUploadStatus(jobId, status, progress) {
+        console.log("更新上传状态:", jobId, status, progress)
+        for (var i = 0; i < uploadModel.count; i++) {
+            var item = uploadModel.get(i)
+            if (item.jobId === jobId) {
+                uploadModel.setProperty(i, "status", status)
+                if (progress !== undefined) {
+                    uploadModel.setProperty(i, "progress", progress)
+                }
+                // 如果上传完成，移动到历史记录
+                if (status === "已完成" && transferWindow
+                        && transferWindow.uploadHistoryModel) {
+                    transferWindow.uploadHistoryModel.append({
+                                                                 "jobId": item.jobId,
+                                                                 "fileName": item.fileName,
+                                                                 "localPath": item.localPath,
+                                                                 "bucket": item.bucket,
+                                                                 "remotePath": item.remotePath,
+                                                                 "status": "已完成",
+                                                                 "progress": 1.0,
+                                                                 "completedTime": new Date().getTime(),
+                                                                 "size": item.size
+                                                                         || 0
+                                                             })
+                    uploadModel.remove(i)
+                }
+                break
+            }
+        }
+        updateActiveUploadCount()
+    }
+    // 添加获取活跃上传数的函数
+    function getActiveUploadCount() {
+        if (!uploadModel)
+            return 0
+
+        var count = 0
+        for (var i = 0; i < uploadModel.count; i++) {
+            var item = uploadModel.get(i)
+            if (item && (item.status === "上传中" || item.status === "准备上传")) {
+                count++
+            }
+        }
+        return count
+    }
+
+    // 更新活跃上传数
+    function updateActiveUploadCount() {
+        var count = 0
+        for (var i = 0; i < uploadModel.count; i++) {
+            var item = uploadModel.get(i)
+            if (item.status === "上传中") {
+                count++
+            }
+        }
+        if (uploadPanel) {
+            uploadPanel.activeUploads = count
+        }
+    }
+
+    function selectBucketByName(bucketName) {
+        console.log("选择桶:", bucketName)
+
+        var bucketModel = ManagerGlobal.getBucketsModel()
+        if (!bucketModel) {
+            console.error("无法获取桶模型")
+            return false
+        }
+
+        // 查找匹配的桶
+        for (var i = 0; i < bucketModel.rowCount(); i++) {
+            var index = bucketModel.index(i, 0)
+            var currentBucketName = bucketModel.data(index, Qt.DisplayRole)
+
+            if (currentBucketName === bucketName) {
+                console.log("找到匹配的桶，索引:", i, "桶名:", bucketName)
+
+                // 设置左侧桶列表的当前索引
+                bucketListView.currentIndex = i
+
+                // 更新当前桶名
+                rootItem.currentBucket = bucketName
+
+                // 切换到对象模型显示
+                switchToObjectsModel(bucketName)
+
+                // 更新面包屑导航
+                breadcrumbNav.resetToRoot()
+                breadcrumbNav.addPathItem(bucketName, bucketName)
+
+                // 重置分页状态
+                resetPaginationOnFolderChange()
+
+                console.log("成功切换到桶:", bucketName)
+                return true
+            }
+        }
+
+        console.warn("未找到匹配的桶:", bucketName)
+        return false
+    }
+
+    // 修改下载任务添加函数
+    function addDownloadTask(taskInfo) {
+        let timestamp = new Date().getTime()
+        let random = Math.floor(Math.random() * 10000)
+        let jobId = `download_${timestamp}_${random}`
+        // 验证必需的下载信息
+        if (!taskInfo.key) {
+            // 缺少 key, 与 name 相同
+            console.error("下载失败: 缺少文件 key")
+            return
+        }
+        if (!taskInfo.name) {
+            console.error("下载失败: 缺少文件名")
+            return
+        }
+        let downloadDir = getDownloadDirectory() // 新增函数获取下载目录
+        let localPath = downloadDir + "/" + taskInfo.name
+        // 下载
+        console.log("本地下下载目录: ", localPath)
+
+        // 将下载任务添加到模型
+        downloadModel.append({
+                                 "name": taskInfo.name,
+                                 "size": taskInfo.size || "未知大小",
+                                 "progress": 0.0,
+                                 "jobId": jobId,
+                                 "status": "准备下载",
+                                 "speed": "0 KB/s",
+                                 "startTime": timestamp,
+                                 "lastUpdateTime": timestamp,
+                                 "key": taskInfo.key,
+                                 "bucketName": rootItem.currentBucket,
+                                 "localPath": localPath,
+                                 "needsRetry": false,
+                                 "retryCount": 0
+                             })
+
+        // 下载名有问题
+        // 点击下载后, 提供的 key 是有效的路径
+        // 获取的 name 有问题
+        console.log("添加下载任务:", jobId, taskInfo.name, taskInfo.size,
+                    taskInfo.key)
+        ManagerGlobal.downloadFile(jobId, rootItem.currentBucket, taskInfo.key,
+                                   localPath)
+        createDownloadTimeoutCheck(jobId)
+        return jobId
+    }
+    // 在 MainPage.qml 中添加获取补全数据的函数
+
+    // 添加监听模型变化的函数，当文件列表更新时刷新补全数据
+    function refreshCompletionData() {
+        if (searchField) {
+            searchField.completionModel = getCurrentFileCompletions()
+        }
+    }
+
+    function getDownloadDirectory() {
+        // 从设置中获取下载目录，如果没有设置则使用默认目录
+        if (typeof ManagerGlobal.getDownloadDirectory === "function") {
+            // return ManagerGlobal.getDownloadDirectory()
+            let savedPath = ManagerGlobal.getDownloadDirectory()
+            if (savedPath && savedPath !== "") {
+                return savedPath
+            }
+        }
+        // 默认下载目录
+        return ManagerGlobal.getDefaultDownloadDirectory ? ManagerGlobal.getDefaultDownloadDirectory(
+                                                               ) : "./downloads"
+    }
+
+    function createDownloadTimeoutCheck(jobId) {
+        // 声明一个列表模型
+        downloadTimeouts[jobId] = {
+            "retryCount": 0,
+            "maxRetries": 3,
+            "checkInterval": 2000
+        }
+        // 创建独立的定时器
+        var timeoutTimer = Qt.createQmlObject(`
+                                              import QtQuick
+                                              Timer {
+                                              interval: 2000
+                                              repeat: false
+                                              property string taskJobId: "${jobId}"
+
+                                              onTriggered: {
+                                              checkSingleTaskProgress(taskJobId)
+                                              }
+                                              }
+                                              `, rootItem,
+                                              `timeoutTimer_${jobId}`)
+        downloadTimeouts[jobId].timer = timeoutTimer
+        timeoutTimer.start()
+    }
+    // 检查单个任务的进度
+    function checkSingleTaskProgress(jobId) {
+        if (!downloadTimeouts[jobId]) {
+            console.warn("任务超时信息不存在:", jobId)
+            return
+        }
+        // 查找对应的下载项
+        var taskItem = null
+        var taskIndex = -1
+        for (var i = 0; i < downloadModel.count; i++) {
+            const item = downloadModel.get(i)
+            if (item && item.jobId === jobId) {
+                taskItem = item
+                taskIndex = i
+                break
+            }
+        }
+        if (!taskItem) {
+            console.warn("找不到下载任务:", jobId)
+            // 清理超时信息
+            cleanupDownloadTimeout(jobId)
+            return
+        }
+        // 检查任务是否卡住
+        if (taskItem.progress === 0 && (taskItem.status === "准备下载"
+                                        || taskItem.status === "连接中...")) {
+            var timeoutInfo = downloadTimeouts[jobId]
+            console.warn("下载任务可能卡住:", jobId, "重试次数:", timeoutInfo.retryCount)
+
+            if (timeoutInfo.retryCount < timeoutInfo.maxRetries) {
+                timeoutInfo.retryCount++
+                downloadModel.setProperty(
+                            taskIndex, "status",
+                            "重试中(" + timeoutInfo.retryCount + "/" + timeoutInfo.maxRetries + ")")
+                console.log("自动重试下载:", jobId)
+                // 重新启动下载
+                ManagerGlobal.downloadFile(jobId, rootItem.currentBucket,
+                                           taskItem.key, taskItem.name)
+
+                // 重新启动定时器检查
+                if (timeoutInfo.timer) {
+                    timeoutInfo.timer.start()
+                }
+            } else {
+                // 超过最大重试次数，标记为错误状态
+                downloadModel.setProperty(taskIndex, "status", "超时")
+                downloadModel.setProperty(taskIndex, "needsRetry", true)
+                downloadModel.setProperty(taskIndex, "speed", "")
+
+                console.error("下载任务超时:", jobId, "重试次数已达上限:",
+                              timeoutInfo.maxRetries)
+
+                // 清理超时信息
+                cleanupDownloadTimeout(jobId)
+            }
+        } else {
+            // 下载已经开始或完成，清理超时信息
+            // console.log("下载任务正常进行或已完成:", jobId)
+            cleanupDownloadTimeout(jobId)
+        }
+    }
+
+    function cleanupDownloadTimeout(jobId) {
+        if (downloadTimeouts[jobId]) {
+            if (downloadTimeouts[jobId].timer) {
+                downloadTimeouts[jobId].timer.stop()
+                downloadTimeouts[jobId].timer.destroy()
+            }
+            delete downloadTimeouts[jobId]
+            // console.log("已清理任务超时信息:", jobId)
+        }
+    }
+
+    // 存储每个任务的超时信息
+    property var downloadTimeouts: ({})
+
+    function retryDownload(jobId) {
+        // 查找对应的下载项
+        for (var i = 0; i < downloadModel.count; i++) {
+            const item = downloadModel.get(i)
+            if (item && item.jobId === jobId) {
+                // 重置状态
+                downloadModel.setProperty(i, "progress", 0.0)
+                downloadModel.setProperty(i, "status", "准备重新下载")
+                downloadModel.setProperty(i, "speed", "0 KB/s")
+                downloadModel.setProperty(i, "needsRetry", false)
+                downloadModel.setProperty(i, "startTime", new Date().getTime())
+                downloadModel.setProperty(i, "lastUpdateTime",
+                                          new Date().getTime())
+                downloadModel.setProperty(i, "retryCount", item.retryCount + 1)
+                // 重新启动下载
+                const bucketName = item.bucketName || rootItem.currentBucket
+                const key = item.key
+                const name = item.name
+
+                console.log("重试下载:", jobId, bucketName, key, name)
+                ManagerGlobal.downloadFile(jobId, bucketName, key, name)
+                Qt.callLater(function () {
+                    checkDownloadProgress(jobId)
+                })
+                break
+            }
+        }
+    }
+
+    function processBatchDownloads() {
+        if (!downloadBatchTimer.batchItems
+                || downloadBatchTimer.nextIndex >= downloadBatchTimer.batchItems.length) {
+            return
+        }
+
+        const startIndex = downloadBatchTimer.nextIndex
+        const endIndex = Math.min(startIndex + downloadBatchTimer.batchSize,
+                                  downloadBatchTimer.batchItems.length)
+        for (var i = startIndex; i < endIndex; i++) {
+            addDownloadTask(downloadBatchTimer.batchItems[i])
+        }
+        downloadBatchTimer.nextIndex = endIndex
+        if (downloadBatchTimer.nextIndex < downloadBatchTimer.batchItems.length) {
+            downloadBatchTimer.start()
+        } else {
+
+            // console.log("所有下载任务已安排完成")
+        }
+    }
+    Timer {
+        id: downloadBatchTimer
+        interval: 200 // 200毫秒延迟
+        repeat: false
+        property var batchItems: []
+        property int nextIndex: 0
+        property int batchSize: 2
+        onTriggered: {
+            processBatchDownloads()
+        }
+    }
+    property ListModel downloadHistoryModel: ListModel {}
+
+    property var downloadWindow: null
+
+    // 添加获取活跃下载数的函数
+    function getActiveDownloadCount() {
+        if (!downloadModel)
+            return 0
+
+        let count = 0
+        for (var i = 0; i < downloadModel.count; i++) {
+            const item = downloadModel.get(i)
+            if (item && item.progress < 1 && item.status !== "错误"
+                    && item.status !== "已完成") {
+                count++
+            }
+        }
+        return count
+    }
+
     function sortByColumn(column, ascending) {
-        // 创建临时数组存储所有数据
         let rows = []
         for (var i = 0; i < tableModel.rowCount; i++) {
             rows.push(tableModel.getRow(i))
@@ -70,14 +1228,12 @@ Item {
                 valueA = a.zone ? a.zone.toLowerCase() : ""
                 valueB = b.zone ? b.zone.toLowerCase() : ""
             } else if (column === 3) {
-                // 处理日期排序 - 使用日期格式解析
                 valueA = parseDateString(a.date)
                 valueB = parseDateString(b.date)
             } else {
-                return 0 // 不支持的列
+                return 0
             }
 
-            // 升序/降序比较
             if (ascending) {
                 if (valueA < valueB)
                     return -1
@@ -93,118 +1249,411 @@ Item {
             }
         })
 
-        // 清除当前数据并按排序顺序重新添加
         tableModel.clear()
         for (var i = 0; i < rows.length; i++) {
             tableModel.appendRow(rows[i])
         }
     }
+    // function resetPaginationOnFolderChange() {
+    //     rootItem.currentPage = 1
+    //     tableView.clearSelection()
+    //     rootItem.currentRecordCount = updateRecordCount()
 
-    // 添加解析日期字符串的辅助函数
+    //     rootItem.pageStartRow = 0
+    //     rootItem.pageEndRow = Math.min(currentPerPage, currentRecordCount) - 1
+
+    //     pagination.totalRecords = rootItem.currentRecordCount
+    //     pagination.currentPage = 1
+    //     rootItem.updatePaginationState()
+
+    //     console.log("文件夹变更，重置分页状态：当前页=1，总记录数=", rootItem.currentRecordCount)
+    // }
+    function resetPaginationOnFolderChange() {
+        console.log("🔄 文件夹变更，重置分页状态")
+
+        // 🔥 重置到第一页
+        rootItem.currentPage = 1
+
+        // 🔥 清除表格选择
+        tableView.clearSelection()
+
+        // 🔥 更新记录数
+        rootItem.currentRecordCount = rootItem.updateRecordCount()
+
+        // 🔥 重新计算分页范围
+        rootItem.pageStartRow = 0
+        rootItem.pageEndRow = Math.min(rootItem.currentPerPage,
+                                       rootItem.currentRecordCount) - 1
+
+        console.log("📊 重置后的分页状态:", {
+                        "currentPage": rootItem.currentPage,
+                        "currentRecordCount": rootItem.currentRecordCount,
+                        "pageStartRow": rootItem.pageStartRow,
+                        "pageEndRow": rootItem.pageEndRow
+                    })
+
+        // 🔥 同步分页组件状态
+        if (pagination) {
+            Qt.callLater(function () {
+                pagination.currentPage = 1
+                pagination.totalRecords = rootItem.currentRecordCount
+            })
+        }
+
+        // 🔥 强制刷新
+        rootItem.updatePaginationState()
+    }
+
     function parseDateString(dateStr) {
-        if (!dateStr)
+        if (!dateStr) {
             return 0
-
+        }
         try {
-            // 尝试解析为日期对象
             const date = new Date(dateStr)
             if (isNaN(date.getTime())) {
-                // 如果无法解析，返回原始字符串
                 return dateStr.toLowerCase()
             }
-            // 返回时间戳用于比较
             return date.getTime()
         } catch (e) {
-            // 失败情况下返回原始字符串
             return dateStr.toLowerCase()
         }
     }
 
-    // 暴露的属性和信号
-    property var folderModel: [] // 文件夹模型数据
-    property var fileModel: [] // 文件模型数据
-
-    property int sortColumn: -1 // -1表示未排序，0,1,2,3对应不同列
-    property bool sortAscending: true // true为升序，false为降序
-
-    signal uploadRequested
-    signal downloadRequested(var selectedItems)
-    signal searchRequested(string query)
-    signal folderSelected(string folderId)
-    signal logoutRequested
-
-    Connections {
-        target: instanceBuckets
-        function onModelChanged() {
-            // 防止在模型未初始化时崩溃
-            try {
-                // 使用更安全的方式刷新列表
-                folderListView.model = folderListView.model // 重新赋值触发更新
-                tableView.refreshData() // 直接调用刷新方法
-                console.log("存储桶数据已更新，模型包含",
-                            instanceBuckets.bucketCount ? instanceBuckets.bucketCount(
-                                                              ) : "未知", "项")
-            } catch (e) {
-                console.error("刷新视图时出错:", e)
-            }
-        }
-    }
-    // 添加一个属性来存储当前面包屑路径
-    property var breadcrumbPathData: []
-
-    // 修改 folderSelected 信号处理
-    onFolderSelected: function (folderId) {
-        console.log("选择文件夹:", folderId)
-
-        // 更新面包屑路径
-        if (folderId === "all") {
-            // 回到根目录
-            breadcrumbPathData = [{
-                                      "id": "all",
-                                      "name": "全部文件"
-                                  }]
+    function switchToBucketsModel() {
+        tableView.inBucketMode = true
+        const availableWidth = contentPanel.width
+        if (availableWidth > 0) {
+            rootItem.columnWidths = [Math.max(200,
+                                              availableWidth * 0.60), Math.max(
+                                         150, availableWidth * 0.20), Math.max(
+                                         150, availableWidth * 0.20)]
+            console.log("桶模型列宽设置为:", rootItem.columnWidths)
         } else {
-            // 查找当前选中的文件夹对象
-            let folderObj = null
-
-            // 从实例存储桶中查找
-            if (instanceBuckets && instanceBuckets.model) {
-                for (var i = 0; i < instanceBuckets.bucketCount(); i++) {
-                    const name = instanceBuckets.getBucketData(i, 0)
-                    if (name === folderId) {
-                        folderObj = {
-                            "id": name,
-                            "name": name
-                        }
-                        break
-                    }
-                }
-            }
-
-            if (folderObj) {
-                // 检查面包屑路径中是否已存在此文件夹
-                const existingIndex = breadcrumbPathData.findIndex(
-                                        item => item.id === folderObj.id)
-
-                if (existingIndex >= 0) {
-                    // 如果存在，截断到此位置
-                    breadcrumbPathData = breadcrumbPathData.slice(
-                                0, existingIndex + 1)
-                } else {
-                    // 如果不存在，添加到路径末尾
-                    breadcrumbPathData.push(folderObj)
-                }
-            }
+            rootItem.columnWidths = [500, 200, 200]
         }
-
-        // 更新面包屑组件的数据
-        breadcrumbPath.currentPath = breadcrumbPathData
-
-        // 刷新表格显示
-        tableView.refreshData()
+        headerBar.headerTitles = ["桶名称", "区域", "创建时间"]
+        console.log("调用一次获取桶，并刷新桶")
+        ManagerGlobal.refreshBuckets()
+        tableView.model = ManagerGlobal.getBucketsModel()
+        // paginationProxy = tableView.model
+        tableView.contentY = 0
+        tableView.forceLayout()
+        Qt.callLater(function () {
+            updateCompletionModel()
+        })
     }
 
-    // BUG 添加退出登录的按钮
+    function switchToObjectsModel(bucketName) {
+        showSuccessMessage(`正在切换到对象模型: ${bucketName}`, "切换成功", 2000)
+        tableView.inBucketMode = false
+        tableView.clearSelection()
+        const availableWidth = contentPanel.width
+        if (availableWidth > 0) {
+            rootItem.columnWidths = [Math.max(200,
+                                              availableWidth * 0.45), Math.max(
+                                         150, availableWidth
+                                         * 0.20), Math.max(150,
+                                                           availableWidth * 0.20), Math.max(
+                                         100, availableWidth * 0.15)]
+        } else {
+            rootItem.columnWidths = [300, 150, 150, 100]
+        }
+        headerBar.headerTitles = [qsTr("对象名称"), qsTr("大小"), qsTr(
+                                      "更新时间"), qsTr("操作")]
+        var objectsModel = ManagerGlobal.getObjectsModel()
+        if (!objectsModel) {
+            console.error("无法获取对象模型")
+            return
+        }
+        if (typeof objectsModel.clear === "function") {
+            objectsModel.clear()
+            console.log("已清空对象模型数据")
+        } else if (typeof objectsModel.removeRows === "function") {
+            var rowCount = objectsModel.rowCount()
+            if (rowCount > 0) {
+                objectsModel.removeRows(0, rowCount)
+                console.log("已移除所有行数据")
+            }
+        }
+        tableView.model = objectsModel
+        tableView.contentY = 0
+        tableView.forceLayout()
+        Qt.callLater(function () {
+            if (rootItem.currentBucket === bucketName) {
+                ManagerGlobal.refreshObjects(bucketName)
+            } else {
+                console.warn("️桶已切换，取消数据请求:", bucketName)
+            }
+        })
+        console.log("对象模型切换完成:", bucketName)
+
+        Qt.callLater(function () {
+            updateCompletionModel()
+        })
+    }
+    onCurrentPageChanged: {
+        console.log("📄 当前页发生变化:", currentPage)
+        updatePaginationState()
+    }
+
+    // 🔥 监听每页记录数变化
+    onCurrentPerPageChanged: {
+        console.log("📝 每页记录数发生变化:", currentPerPage)
+        updatePaginationState()
+    }
+
+    // 🔥 监听总记录数变化
+    onCurrentRecordCountChanged: {
+        console.log("📊 总记录数发生变化:", currentRecordCount)
+        updatePaginationState()
+    }
+
+    property int pageStartRow: (currentPage - 1) * currentPerPage
+    property int pageEndRow: Math.min(pageStartRow + currentPerPage,
+                                      currentRecordCount) - 1
+
+    function getPageStartRow() {
+        return (currentPage - 1) * currentPerPage
+    }
+
+    function getPageEndRow() {
+        return Math.min(getPageStartRow() + currentPerPage,
+                        currentRecordCount) - 1
+    }
+    // 添加函数来更新分页状态
+    // function updatePaginationState() {
+    //     // 强制刷新表格布局
+    //     Qt.callLater(function () {
+    //         tableView.forceLayout()
+    //         tableView.contentY = 0
+    //     })
+    // }
+    function updatePaginationState() {
+        console.log("🔄 更新分页状态:", {
+                        "currentPage": currentPage,
+                        "currentPerPage": currentPerPage,
+                        "currentRecordCount": currentRecordCount,
+                        "pageStartRow": pageStartRow,
+                        "pageEndRow": pageEndRow
+                    })
+
+        // 🔥 确保分页组件状态同步
+        if (pagination) {
+            Qt.callLater(function () {
+                pagination.currentPage = rootItem.currentPage
+                pagination.totalRecords = rootItem.currentRecordCount
+                pagination.rowsPerPage = rootItem.currentPerPage
+            })
+        }
+
+        // 🔥 强制刷新表格布局
+        Qt.callLater(function () {
+            if (tableView) {
+                tableView.forceLayout()
+                tableView.contentY = 0
+            }
+        })
+    }
+
+    // function updateRecordCount() {
+    //     if (!tableView.model) {
+    //         return 0
+    //     }
+    //     if (typeof tableView.model.totalCount !== "undefined") {
+    //         return tableView.model.totalCount
+    //     }
+    //     if (typeof tableView.model.rowCount === "function") {
+    //         return tableView.model.rowCount()
+    //     }
+
+    //     return 0
+    // }
+    function updateRecordCount() {
+        if (!tableView.model) {
+            return 0
+        }
+
+        try {
+            var count = 0
+            if (typeof tableView.model.totalCount !== "undefined") {
+                count = tableView.model.totalCount
+            } else if (typeof tableView.model.rowCount === "function") {
+                count = tableView.model.rowCount()
+            }
+
+            console.log("📊 更新记录数:", count, "模式:",
+                        tableView.inBucketMode ? "桶模式" : "对象模式")
+            return count
+        } catch (e) {
+            console.error("❌ 更新记录数失败:", e)
+            return 0
+        }
+    }
+
+    function getCurrentPageRowCount() {
+        if (!tableView.model)
+            return 0
+        if (typeof tableView.model.currentPageRowCount !== "undefined") {
+            return tableView.model.currentPageRowCount
+        }
+        const totalRecords = updateRecordCount()
+        const rowsPerPage = pagination.rowsPerPage
+        const currentPage = pagination.currentPage
+        const firstRow = (currentPage - 1) * rowsPerPage
+        return Math.min(rowsPerPage, totalRecords - firstRow)
+    }
+
+    // 添加到 MainPage.qml 中的函数区域
+    function handleBucketSwitch(bucketName) {
+        console.log("🔄 开始切换桶:", bucketName)
+
+        // 🔥 显示加载状态
+        loadingOverlay.show("objects", `正在加载 ${bucketName} 中的文件...`)
+
+        // 🔥 立即更新界面状态
+        currentBucket = bucketName
+
+        // 🔥 清空选择状态
+        tableView.clearSelection()
+
+        // 🔥 更新左侧桶列表选择
+        updateBucketListSelection(bucketName)
+
+        // 🔥 重置面包屑导航
+        breadcrumbNav.resetToRoot()
+        breadcrumbNav.addPathItem(bucketName, bucketName)
+
+        // 🔥 重置分页状态
+        resetPaginationOnFolderChange()
+
+        // 🔥 关键：先切换到对象模式，再请求数据
+        switchToObjectsModelSafely(bucketName)
+    }
+
+    function handleBucketRefresh(bucketName) {
+        console.log("🔄 刷新桶:", bucketName)
+
+        loadingOverlay.show("objects", `正在刷新 ${bucketName} 中的文件...`)
+
+        // 清空选择但保持其他状态
+        tableView.clearSelection()
+
+        // 直接刷新数据
+        ManagerGlobal.refreshObjects(bucketName)
+    }
+
+    function switchToObjectsModelSafely(bucketName) {
+        console.log("🔄 安全切换到对象模型:", bucketName)
+
+        try {
+            // 🔥 设置表格模式
+            tableView.inBucketMode = false
+
+            // 🔥 计算列宽
+            const availableWidth = contentPanel.width
+            if (availableWidth > 0) {
+                rootItem.columnWidths = [Math.max(200,
+                                                  availableWidth * 0.45), Math.max(
+                                             150, availableWidth
+                                             * 0.20), Math.max(150,
+                                                               availableWidth * 0.20), Math.max(
+                                             100, availableWidth * 0.15)]
+            } else {
+                rootItem.columnWidths = [300, 150, 150, 100]
+            }
+
+            headerBar.headerTitles = ["对象名称", "大小", "更新时间", "操作"]
+
+            var objectsModel = ManagerGlobal.getObjectsModel()
+            if (!objectsModel) {
+                console.error("❌ 无法获取对象模型")
+                loadingOverlay.hide()
+                return
+            }
+
+            if (typeof objectsModel.clear === "function") {
+                objectsModel.clear()
+                console.log("✅ 已清空对象模型数据")
+            }
+
+            // 🔥 设置表格模型
+            tableView.model = objectsModel
+
+            // 🔥 重置滚动位置
+            tableView.contentY = 0
+
+            // 🔥 强制刷新布局
+            tableView.forceLayout()
+
+            // 🔥 延迟请求数据，确保界面状态已更新
+            Qt.callLater(function () {
+                if (rootItem.currentBucket === bucketName) {
+                    console.log("🔄 开始请求桶数据:", bucketName)
+                    ManagerGlobal.refreshObjects(bucketName)
+                } else {
+                    console.warn("⚠️ 桶已切换，取消数据请求:", bucketName)
+                    loadingOverlay.hide()
+                }
+            })
+
+            console.log("✅ 对象模型切换完成:", bucketName)
+        } catch (error) {
+            console.error("❌ 切换对象模型失败:", error)
+            loadingOverlay.hide()
+        }
+    }
+
+    function updateBucketListSelection(bucketName) {
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.warn("无法获取桶模型")
+                return
+            }
+
+            // 查找匹配的桶并设置选择
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var currentBucketName = bucketModel.data(index, Qt.DisplayRole)
+
+                if (currentBucketName === bucketName) {
+                    bucketListView.currentIndex = i
+                    console.log("✅ 更新桶列表选择:", bucketName, "索引:", i)
+                    break
+                }
+            }
+        } catch (error) {
+            console.error("❌ 更新桶列表选择失败:", error)
+        }
+    }
+
+    onDownloadRequested: function (selectedItems) {
+        // 首先执行这里
+        console.log("下载文件请求，总项目数:", selectedItems.length)
+        // 如果选中项少于等于4个，直接处理
+        if (selectedItems.length <= 4) {
+            for (var i = 0; i < selectedItems.length; i++) {
+                addDownloadTask(selectedItems[i])
+            }
+            // downloadPanel.open()
+            return
+        }
+        // downloadPanel.open()
+
+        // 设置批处理计时器属性
+        downloadBatchTimer.batchItems = selectedItems
+        downloadBatchTimer.nextIndex = 0
+        downloadBatchTimer.batchSize = 4
+
+        processBatchDownloads()
+    }
+    // 确保有 LoadingOverlay 组件
+    LoadingOverlay {
+        id: loadingOverlay
+        anchors.fill: parent
+        z: 1000
+    }
+
     // 整体布局
     ColumnLayout {
         anchors.fill: parent
@@ -223,22 +1672,29 @@ Item {
                     leftMargin: 16
                     rightMargin: 16
                 }
-                spacing: 12
-
+                spacing: 6
                 // 搜索框
-                TextField {
+                HistoryTextField {
                     id: searchField
                     Layout.preferredWidth: 300
                     Layout.preferredHeight: 36
-                    // 添加以下属性以禁用浮动标签
-                    Material.accent: "#2980B9" // 设置强调色
-                    Material.foreground: "#333333" // 设置前景色
+                    enableCompletion: true
+                    color: "#FFFFFF"
+                    showHistoryButton: false
+                    showClearButton: true
+                    completionModel: {
+                        if (tableView.inBucketMode) {
+                            return getBucketCompletionData()
+                        } else {
+                            return getFileCompletionData()
+                        }
+                    }
+
                     background: Rectangle {
-                        color: "#FFFFFF"
+                        color: "#404040"
                         opacity: 0.9
                         radius: 4
                         border.width: 0
-                        // 聚焦状态时的边框
                         Rectangle {
                             visible: searchField.activeFocus
                             anchors.fill: parent
@@ -248,8 +1704,6 @@ Item {
                             border.width: 1
                         }
                     }
-
-                    // 使用自定义占位文本，仅在文本框为空时显示
                     Label {
                         visible: !searchField.text && !searchField.activeFocus
                         anchors {
@@ -257,195 +1711,553 @@ Item {
                             leftMargin: 10
                             verticalCenter: parent.verticalCenter
                         }
-                        text: "搜索文件..."
+                        text: "搜索桶..."
                         color: "#999999"
                     }
+
                     onAccepted: {
                         if (text.length > 0) {
                             searchRequested(text)
                         }
                     }
-
-                    // 搜索图标
-                    Label {
-                        anchors {
-                            right: parent.right
-                            verticalCenter: parent.verticalCenter
-                            rightMargin: 8
-                        }
-                        text: "🔍"
-                        color: "#555555"
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (searchField.text.length > 0) {
-                                    searchRequested(searchField.text)
-                                }
+                    Timer {
+                        id: searchTimer
+                        interval: 300 // 300ms延迟
+                        repeat: false
+                        onTriggered: {
+                            if (searchField.text.length >= 1) {
+                                performSearch(searchField.text)
                             }
                         }
+                    }
+                    onTextChanged: {
+                        console.log("搜索框文本变化:", text, "当前模式:",
+                                    tableView.inBucketMode ? "桶模式" : "对象模式")
+
+                        if (text.length === 0) {
+                            resetSearch()
+                        } else {
+                            // 🔥 立即更新补全数据
+                            updateCompletionModel()
+
+                            if (text.length >= 1) {
+                                // 延迟搜索
+                                searchTimer.restart()
+                            }
+                        }
+                    }
+                    onCompletionItemSelected: function (value) {
+                        console.log("选择了补全项:", value)
+                        performSearch(value)
+                    }
+                    onHistoryItemSelected: function (value) {
+                        console.log("选择了历史记录:", value)
+                        if (tableView.inBucketMode) {
+                            var success = selectBucketByName(value)
+                        }
+                        // 关闭
+                        console.log("关闭搜索框")
+                        togglePopup(false)
                     }
                 }
                 // 占位符
                 Item {
                     Layout.fillWidth: true
                 }
+                RowLayout {
+                    spacing: 6
+                    Button {
+                        id: switchBucketListButton
+                        text: "桶列表"
+                        Layout.preferredWidth: 72
+                        Layout.preferredHeight: 50
+                        // 修复后的内容布局
+                        contentItem: Rectangle {
+                            color: "transparent" // 透明背景
+                            Text {
+                                id: buttonText
+                                text: switchBucketListButton.text
+                                anchors.centerIn: parent // 绝对居中
+                                font.pixelSize: 14
+                                color: "#FFFFFF"
+                            }
+                        }
+                        background: Rectangle {
+                            color: switchBucketListButton.hovered ? "#3498DB" : "#2980B9"
+                            radius: 4
+                        }
+                        onClicked: {
+                            console.log("桶列表按钮点击")
+                            rootItem.currentBucket = ""
+                            tableView.clearSelection()
+                            switchToBucketsModel()
+                            breadcrumbNav.clearModel()
+                            breadcrumbNav.resetToRoot()
+                            bucketListView.currentIndex = -1
+                        }
+                    }
+                    Button {
+                        id: refreshButton
+                        text: qsTr("刷新")
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 50
+                        property bool isRefreshing: false
+                        // 修复后的内容布局 - 使用Item作为顶层容器
+                        contentItem: Item {
+                            anchors.fill: parent
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: parent.width - 10
+                                height: parent.height
+                                spacing: 3
+                                Item {
+                                    Layout.fillWidth: true
+                                }
 
-                // 操作按钮组
-                Row {
-                    spacing: 10
+                                // 刷新图标容器
+                                Item {
+                                    Layout.preferredWidth: 16
+                                    Layout.preferredHeight: 16
+                                    Layout.alignment: Qt.AlignVCenter
 
+                                    Text {
+                                        id: refreshIcon
+                                        text: "⟳" // 使用Unicode刷新符号
+                                        font.pixelSize: 14
+                                        color: "#FFFFFF"
+                                        anchors.centerIn: parent
+                                        transformOrigin: Item.Center
+
+                                        RotationAnimation {
+                                            id: rotationAnimation
+                                            target: refreshIcon
+                                            from: 0
+                                            to: 360
+                                            duration: 1500
+                                            loops: Animation.Infinite
+                                            running: refreshButton.isRefreshing
+                                        }
+                                    }
+                                }
+
+                                // 刷新文本
+                                Text {
+                                    text: refreshButton.isRefreshing ? "刷新中..." : refreshButton.text
+                                    font.pixelSize: refreshButton.isRefreshing ? 11 : 13
+                                    color: "#FFFFFF"
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                // 添加右侧填充确保水平居中
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+                        background: Rectangle {
+                            color: refreshButton.hovered ? "#3498DB" : "#2980B9"
+                            radius: 4
+
+                            // 添加波纹效果
+                            Rectangle {
+                                id: refreshRipple
+                                anchors.centerIn: parent
+                                width: 0
+                                height: 0
+                                radius: width / 2
+                                color: "#FFFFFF"
+                                opacity: 0
+
+                                // 波纹动画
+                                NumberAnimation {
+                                    id: rippleAnimation
+                                    targets: [refreshRipple]
+                                    properties: "width,height"
+                                    from: 0
+                                    to: refreshButton.width * 2
+                                    duration: 500
+                                    easing.type: Easing.OutQuad
+                                    running: false
+                                    onFinished: refreshRipple.opacity = 0
+                                }
+
+                                // 透明度动画
+                                NumberAnimation {
+                                    id: opacityAnimation
+                                    target: refreshRipple
+                                    property: "opacity"
+                                    from: 0.3
+                                    to: 0
+                                    duration: 500
+                                    easing.type: Easing.OutQuad
+                                    running: false
+                                }
+                            }
+                        }
+                        // 按钮点击事件
+                        onClicked: {
+                            // 防止重复点击
+                            if (isRefreshing) {
+                                return
+                            }
+                            // 播放波纹动画
+                            refreshRipple.opacity = 0.3
+                            rippleAnimation.start()
+                            opacityAnimation.start()
+                            // 设置刷新状态，开始旋转
+                            isRefreshing = true
+                            // 记录刷新开始时间
+                            refreshStartTime = Date.now()
+                            // 根据当前模式执行不同的刷新
+                            if (tableView.inBucketMode) {
+                                // 如果当前是桶模式，刷新桶列表
+                                console.log("刷新桶列表")
+                                ManagerGlobal.refreshBuckets()
+                            } else if (rootItem.currentBucket) {
+                                // 回到根目录下
+                                breadcrumbNav.resetToRoot()
+                                console.log("刷新当前桶中的对象:",
+                                            rootItem.currentBucket)
+                                ManagerGlobal.refreshObjects(
+                                            rootItem.currentBucket)
+                                breadcrumbNav.addPathItem(
+                                            rootItem.currentBucket,
+                                            rootItem.currentBucket)
+                            } else {
+                                // 默认刷新桶列表
+                                console.log("刷新桶列表")
+                                ManagerGlobal.refreshBuckets()
+                            }
+                            // 确保刷新状态最终会被重置，即使没有收到完成信号
+                            refreshTimer.start()
+                        }
+                        // 定义刷新开始时间以确保最小刷新持续时间
+                        property var refreshStartTime: null
+                        // 定时器控制刷新动画时长
+                        Timer {
+                            id: refreshTimer
+                            interval: 1500 // 刷新动画最短持续1.5秒
+                            repeat: false
+                            onTriggered: {
+                                // 计算已经过去的刷新时间
+                                const elapsedTime = Date.now(
+                                                      ) - (refreshButton.refreshStartTime
+                                                           || Date.now())
+
+                                // 如果已经过去足够长的时间，重置刷新状态
+                                if (elapsedTime >= 1000) {
+                                    refreshButton.isRefreshing = false
+                                } else {
+                                    // 否则等待剩余时间后再重置
+                                    interval = 1000 - elapsedTime
+                                    start()
+                                }
+                            }
+                        }
+
+                        // 添加工具提示
+                        ToolTip.visible: hovered && !isRefreshing
+                        ToolTip.text: qsTr("刷新当前视图")
+                        ToolTip.delay: 500
+
+                        // 刷新完成处理
+                        Connections {
+                            target: ManagerGlobal
+                            // 辅助函数确保刷新状态正确重置
+                            function finishRefreshing() {
+                                const elapsedTime = Date.now(
+                                                      ) - (refreshButton.refreshStartTime
+                                                           || Date.now())
+
+                                // 确保动画至少显示一段最短时间
+                                if (elapsedTime < 800) {
+                                    // 如果时间太短，延迟重置刷新状态
+                                    refreshTimer.interval = 800 - elapsedTime
+                                    refreshTimer.start()
+                                } else {
+                                    // 已经过了足够长的时间，可以立即重置
+                                    refreshButton.isRefreshing = false
+                                }
+                            }
+                        }
+                    }
                     // 上传按钮
                     Button {
                         id: uploadButton
-                        text: "上传"
+                        text: "上传文件"
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 50
                         icon.source: "qrc:/resources/icon/upload.png"
                         icon.color: "transparent"
+                        contentItem: Item {
+                            anchors.fill: parent
 
-                        contentItem: RowLayout {
-                            spacing: 5
-                            Image {
-                                source: "qrc:/resources/icon/upload.png"
-                                Layout.preferredWidth: 16
-                                Layout.preferredHeight: 16
-                                fillMode: Image.PreserveAspectFit
-                            }
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 12,
+                                                70) // 确保内容不超出按钮边界
+                                height: parent.height
+                                spacing: 4
 
-                            Text {
-                                text: uploadButton.text
-                                font.pixelSize: 14
-                                color: "#FFFFFF"
+                                Image {
+                                    source: "qrc:/resources/icon/upload.png"
+                                    Layout.preferredWidth: 14
+                                    Layout.preferredHeight: 14
+                                    Layout.alignment: Qt.AlignVCenter
+                                    fillMode: Image.PreserveAspectFit
+                                    visible: source != ""
+                                }
+
+                                Text {
+                                    text: uploadButton.text
+                                    font.pixelSize: 12
+                                    color: "#FFFFFF"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    elide: Text.ElideRight
+                                    wrapMode: Text.NoWrap
+                                }
                             }
                         }
 
                         background: Rectangle {
                             color: uploadButton.hovered ? "#3498DB" : "#2980B9"
                             radius: 4
+                            implicitWidth: uploadButton.Layout.preferredWidth
+                            implicitHeight: uploadButton.Layout.preferredHeight
                         }
-
-                        onClicked: uploadRequested()
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                rootItem.uploadRequested()
+                            }
+                        }
                     }
 
                     // 下载按钮
                     Button {
-                        id: downloadButton
+                        id: downloadTitleButton
                         text: "下载"
-                        // enabled: tableView.selectionModel.hasSelection
+                        Layout.preferredWidth: 70 // 固定宽度
+                        Layout.preferredHeight: 50
                         enabled: tableView.selectedItems
                                  && tableView.selectedItems.length > 0
+                        contentItem: Item {
+                            anchors.fill: parent
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: parent.width - 10
+                                height: parent.height
+                                spacing: 3
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                                Image {
+                                    source: "qrc:/resources/icon/download.png"
+                                    Layout.preferredWidth: 14
+                                    Layout.preferredHeight: 14
+                                    Layout.alignment: Qt.AlignVCenter
+                                    fillMode: Image.PreserveAspectFit
+                                }
 
-                        contentItem: RowLayout {
-                            spacing: 5
-                            Image {
-                                source: "qrc:/resources/icon/download.png"
-                                Layout.preferredWidth: 16
-                                Layout.preferredHeight: 16
-                                fillMode: Image.PreserveAspectFit
-                            }
-
-                            Text {
-                                text: downloadButton.text
-                                font.pixelSize: 14
-                                color: "#FFFFFF"
-                                opacity: downloadButton.enabled ? 1.0 : 0.5
+                                Text {
+                                    text: downloadTitleButton.text
+                                    font.pixelSize: 13
+                                    color: "#FFFFFF"
+                                    opacity: downloadTitleButton.enabled ? 1.0 : 0.5
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+                                Item {
+                                    Layout.fillWidth: true
+                                }
                             }
                         }
 
                         background: Rectangle {
-                            color: downloadButton.enabled ? (downloadButton.hovered ? "#27AE60" : "#2ECC71") : "#7F8C8D"
+                            color: downloadTitleButton.enabled ? (downloadTitleButton.hovered ? "#27AE60" : "#2ECC71") : "#7F8C8D"
                             radius: 4
                         }
-
                         onClicked: {
-                            // downloadRequested(
-                            //             tableView.selectionModel.selectedItems)
-                            // 修改为使用 selectedItems
                             downloadRequested(tableView.selectedItems)
                         }
                     }
                     Button {
-                        id: moreButton
-                        text: "操作"
-                        contentItem: RowLayout {
-                            spacing: 5
-                            Text {
-                                text: moreButton.text
-                                font.pixelSize: 14
-                                color: "#FFFFFF"
-                            }
-                            Text {
-                                text: "▼"
-                                font.pixelSize: 10
-                                color: "#FFFFFF"
+                        id: transferManagerButton
+                        text: "传输管理"
+                        Layout.preferredWidth: 85
+                        Layout.preferredHeight: 50
+                        contentItem: Item {
+                            anchors.fill: parent
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 12, 70)
+                                height: parent.height
+                                spacing: 4
+                                Text {
+                                    text: "📊"
+                                    font.pixelSize: 13
+                                    color: "#FFFFFF"
+                                }
+
+                                Text {
+                                    text: transferManagerButton.text
+                                    font.pixelSize: 12
+                                    color: "#FFFFFF"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
                             }
                         }
 
                         background: Rectangle {
-                            color: moreButton.hovered ? "#34495E" : "#2C3E50"
+                            color: transferManagerButton.hovered ? "#3498DB" : "#2980B9"
                             radius: 4
-                            border.color: "#7F8C8D"
-                            border.width: 1
+                            // 确保背景完全包含内容
+                            implicitWidth: transferManagerButton.Layout.preferredWidth
+                            implicitHeight: transferManagerButton.Layout.preferredHeight
                         }
 
-                        onClicked: operationsMenu.popup()
+                        // MouseArea {
+                        //     // 点击无效
+                        //     cursorShape: Qt.PointingHandCursor
+                        //     onClicked: openTransferManager()
+                        // }
+                        onClicked: openTransferManager()
 
-                        // Menu {
-                        Menu {
-                            id: operationsMenu
-                            MenuItem {
-                                text: "新建文件夹"
-                                onTriggered: console.log("新建文件夹")
-                            }
-                            MenuItem {
-                                text: "重命名"
-                                enabled: tableView.selectedItems
-                                         && tableView.selectedItems.length === 1
-                                onTriggered: console.log("重命名")
-                            }
-                            MenuItem {
-                                text: "删除"
-                                enabled: tableView.selectedItems
-                                         && tableView.selectedItems.length > 0
-                                onTriggered: console.log("删除")
-                            }
-                            MenuSeparator {}
-                            MenuItem {
-                                text: "刷新"
-                                onTriggered: {
-                                    console.log("刷新")
-                                    if (instanceBuckets
-                                            && typeof instanceBuckets.refreshBuckets
-                                            === "function") {
-                                        instanceBuckets.refreshBuckets()
-                                    } else {
-                                        console.error("刷新方法不可用")
-                                    }
-                                }
-                            }
+                        TtToolTip {
+                            visible: parent.hovered
+                            text: qsTr("打开传输管理器 (Ctrl+T)")
+                            delay: 500
+                            arrowPosition: "auto"
                         }
                     }
+                    // Button {
+                    //     id: downloadManagerButton
+                    //     text: "下载管理"
+                    //     Layout.preferredWidth: 85
+                    //     Layout.preferredHeight: 50
+
+                    //     contentItem: Rectangle {
+                    //         color: "transparent"
+
+                    //         Row {
+                    //             anchors.centerIn: parent
+                    //             spacing: 5
+                    //             Image {
+                    //                 width: 14
+                    //                 height: 14
+                    //                 anchors.verticalCenter: parent.verticalCenter
+                    //                 source: "qrc:/resources/icon/download.png"
+                    //                 fillMode: Image.PreserveAspectFit
+                    //             }
+                    //             Text {
+                    //                 text: downloadManagerButton.text
+                    //                 font.pixelSize: 13
+                    //                 color: "#FFFFFF"
+                    //                 anchors.verticalCenter: parent.verticalCenter
+                    //             }
+                    //             Rectangle {
+                    //                 width: 16
+                    //                 height: 16
+                    //                 radius: 8
+                    //                 color: "#EF4444"
+                    //                 visible: getActiveDownloadCount() > 0
+                    //                 anchors.verticalCenter: parent.verticalCenter
+
+                    //                 Text {
+                    //                     anchors.centerIn: parent
+                    //                     text: getActiveDownloadCount()
+                    //                     font.pixelSize: 9
+                    //                     font.bold: true
+                    //                     color: "white"
+                    //                 }
+                    //             }
+                    //         }
+                    //     }
+
+                    //     background: Rectangle {
+                    //         color: downloadManagerButton.hovered ? "#3498DB" : "#2980B9"
+                    //         radius: 4
+                    //     }
+
+                    //     onClicked: {
+                    //         if (!downloadWindow) {
+                    //             createDownloadWindow()
+                    //         }
+                    //         downloadWindow.visible = true
+                    //     }
+
+                    //     // 保留工具提示
+                    //     ToolTip.visible: hovered
+                    //     ToolTip.text: "下载管理"
+                    //     ToolTip.delay: 500
+                    // }
+                    // Button {
+                    //     id: moreButton
+                    //     text: "操作"
+                    //     Layout.preferredWidth: 70
+                    //     Layout.preferredHeight: 50
+                    //     contentItem: RowLayout {
+                    //         spacing: 3
+                    //         Text {
+                    //             text: moreButton.text
+                    //             font.pixelSize: 13
+                    //             color: "#FFFFFF"
+                    //         }
+                    //         Text {
+                    //             text: "▼"
+                    //             font.pixelSize: 9
+                    //             color: "#FFFFFF"
+                    //         }
+                    //     }
+
+                    //     background: Rectangle {
+                    //         color: moreButton.hovered ? "#34495E" : "#2C3E50"
+                    //         radius: 4
+                    //         border.color: "#7F8C8D"
+                    //         border.width: 1
+                    //     }
+
+                    //     onClicked: operationsMenu.popup()
+
+                    //     TtMenu {
+                    //         id: operationsMenu
+                    //         MenuItem {
+                    //             text: "新建文件夹"
+                    //             onTriggered: console.log("新建文件夹")
+                    //         }
+                    //         MenuItem {
+                    //             text: "重命名"
+                    //             enabled: tableView.selectedItems
+                    //                      && tableView.selectedItems.length === 1
+                    //             onTriggered: console.log("重命名")
+                    //         }
+                    //         MenuItem {
+                    //             text: "删除"
+                    //             enabled: tableView.selectedItems
+                    //                      && tableView.selectedItems.length > 0
+                    //             onTriggered: console.log("删除")
+                    //         }
+                    //     }
+                    // }
                     Button {
                         id: settingsButton
-                        width: 40
-                        height: 40
-                        text: "设置"
-
-                        // 移除背景以使用自定义视觉效果
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
                         background: Item {
-                            anchors.fill: parent // 确保背景填满按钮
+                            anchors.fill: parent
 
                             Rectangle {
                                 anchors.centerIn: parent
-                                // 使用最小值确保是圆形
                                 property real size: Math.min(parent.width,
-                                                             parent.height) - 8
+                                                             parent.height) - 6
                                 width: size
                                 height: size
                                 radius: width / 2
                                 color: "#3498DB"
                                 opacity: settingsButton.hovered ? 0.2 : 0
-
-                                // 悬停动画
                                 Behavior on opacity {
                                     NumberAnimation {
                                         duration: 150
@@ -453,21 +2265,17 @@ Item {
                                 }
                             }
                         }
-                        // 图标作为主要内容
                         contentItem: Item {
                             anchors.fill: parent
-                            // 设置图标 - 使用 FontAwesome 或类似图标字体
                             Text {
                                 leftPadding: 1
                                 id: settingsIcon
                                 anchors.centerIn: parent
-                                text: "⚙️" // 使用 Unicode 设置图标
-                                font.pixelSize: 20
+                                text: "⚙️"
+                                font.pixelSize: 16
                                 color: "#FFFFFF"
-
-                                // 点击时的动画效果
                                 RotationAnimation {
-                                    id: rotationAnimation
+                                    id: settingRotationAnimation
                                     target: settingsIcon
                                     from: 0
                                     to: 90
@@ -476,9 +2284,8 @@ Item {
                                 }
                             }
                         }
-                        // 点击效果
                         onPressed: {
-                            rotationAnimation.start()
+                            settingRotationAnimation.start()
                         }
                         onClicked: {
                             settingsMenu.popup()
@@ -488,18 +2295,13 @@ Item {
                             animationType: TtMenu.AnimationType.Elegant
                             MenuItem {
                                 text: qsTr("账号设置")
-                                // icon.source: "qrc:/resources/icon/account.png" // 添加图标
                                 onTriggered: {
                                     console.log("账号设置")
-                                    // 实现账号设置 功能
                                 }
                             }
                             MenuItem {
                                 text: qsTr("偏好设置")
-                                // icon.source: "qrc:/resources/icon/preferences.png" // 添加图标
                                 onTriggered: {
-                                    console.log("偏好设置")
-                                    // 实现偏好设置功能
                                     var component = Qt.createComponent(
                                                 "PreferencesDialog.qml")
                                     if (component.status === Component.Ready) {
@@ -507,8 +2309,18 @@ Item {
                                                     rootItem)
                                         dialog.settingsApplied.connect(
                                                     function () {
-                                                        // 这里处理应用设置后的逻辑
-                                                        console.log("设置已应用")
+                                                        // console.log("设置已应用")
+                                                        if (dialog.downloadPath
+                                                                && dialog.downloadPath !== "") {
+                                                            ManagerGlobal.setDownloadDirectory(
+                                                                        dialog.downloadPath)
+                                                            console.log("下载目录已更新为:",
+                                                                        dialog.downloadPath)
+                                                        }
+                                                        //  // 如果有其他下载相关设置，在这里处理
+                                                        // if (dialog.maxDownloadSpeed !== undefined) {
+                                                        //     ManagerGlobal.setMaxDownloadSpeed(dialog.maxDownloadSpeed)
+                                                        // }
                                                     })
                                         dialog.visible = true
                                     } else {
@@ -520,7 +2332,6 @@ Item {
                             MenuSeparator {}
                             MenuItem {
                                 text: qsTr("退出登录")
-                                // icon.source: "qrc:/resources/icon/logout.png" // 添加图标
                                 onTriggered: {
                                     console.log("退出登录")
                                     rootItem.logoutRequested()
@@ -541,16 +2352,13 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-
-            // 分割主内容区
-            // SplitView {
             TtSplitView {
                 anchors.fill: parent
                 // 左侧导航面板
                 Rectangle {
                     id: navPanel
-                    SplitView.preferredWidth: 200
-                    SplitView.minimumWidth: 180
+                    SplitView.preferredWidth: 190
+                    SplitView.minimumWidth: 150
                     SplitView.maximumWidth: 300
                     color: "#2D3436"
 
@@ -560,7 +2368,7 @@ Item {
                         // 导航标题
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 40
+                            height: 30
                             color: "#1E272E"
                             Label {
                                 anchors {
@@ -568,71 +2376,39 @@ Item {
                                     leftMargin: 16
                                     verticalCenter: parent.verticalCenter
                                 }
-                                text: "存储分类"
+                                text: "存储桶"
                                 color: "#FFFFFF"
                                 font.pixelSize: 16
-                                font.bold: true
+                                // font.bold: true
                             }
                         }
                         // 左侧文件列表
                         ListView {
-                            id: folderListView
+                            id: bucketListView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             clip: true
-                            // 使用实际的存储桶数据来创建文件夹列表
                             model: {
-                                // 创建带图标的文件夹列表
-                                let folders = []
-                                // 添加"全部文件"固定项
-                                folders.push({
-                                                 "id": "all",
-                                                 "name": "全部文件",
-                                                 "icon": "folder"
-                                             })
-                                // 从模型中获取存储桶名称作为文件夹
-                                if (instanceBuckets && instanceBuckets.model) {
-                                    for (var i = 0; i < instanceBuckets.model.rowCount(
-                                             ); i++) {
-                                        const bucketName = instanceBuckets.model.data(
-                                                             instanceBuckets.model.index(
-                                                                 i, 0))
-                                        const location = instanceBuckets.model.data(
-                                                           instanceBuckets.model.index(
-                                                               i, 1))
-
-                                        folders.push({
-                                                         "id": bucketName,
-                                                         "name": bucketName,
-                                                         "location": location,
-                                                         "icon": "folder"
-                                                     })
-                                    }
-                                }
-                                return folders
+                                // 这里获取了一次
+                                console.log("构造 左侧 bucket 时调用获取桶模型")
+                                // 初始时获取 ???
+                                return ManagerGlobal.getBucketsModel()
                             }
-                            // 在 Component.onCompleted 中添加检查
+                            currentIndex: -1
                             Component.onCompleted: {
-                                // 检查 instanceBuckets 是否可用
-                                if (!instanceBuckets) {
-                                    console.error(
-                                                "instanceBuckets 对象不可用，请确保在 main.cpp 中正确注册")
-                                } else {
-                                    console.log("instanceBuckets 已加载, 存储桶数:",
-                                                instanceBuckets.bucketCount ? instanceBuckets.bucketCount() : "方法不可用")
-                                }
+                                // 刷新桶表
+                                console.log("左侧列表刷新桶, 再未登录之前")
+                                ManagerGlobal.refreshBuckets()
                             }
-
                             delegate: ItemDelegate {
                                 id: folderItem
-                                width: folderListView.width
+                                width: bucketListView.width
                                 height: 50
                                 highlighted: ListView.isCurrentItem
 
                                 background: Rectangle {
                                     color: folderItem.highlighted ? "#34495E" : folderItem.hovered ? "#2C3E50" : "transparent"
                                 }
-
                                 RowLayout {
                                     anchors {
                                         left: parent.left
@@ -642,76 +2418,138 @@ Item {
                                         verticalCenter: parent.verticalCenter
                                     }
                                     spacing: 12
-
-                                    // 文件夹图标
                                     Rectangle {
                                         width: 24
                                         height: 24
                                         color: "transparent"
-
                                         Text {
                                             anchors.centerIn: parent
-                                            text: getIconForFolder(
-                                                      modelData.icon)
+                                            text: "🪣"
                                             font.pixelSize: 18
-                                            color: "#3498DB"
+                                            color: "#F0F0F0"
                                         }
                                     }
-
-                                    // 文件夹名称
                                     Label {
                                         Layout.fillWidth: true
-                                        text: modelData.name
-                                        color: "#ECF0F1"
+                                        text: model.display || ""
+                                        font.pixelSize: 14
+                                        color: "#F0F0F0"
                                         elide: Text.ElideRight
                                     }
                                 }
-
-                                onClicked: {
-                                    folderListView.currentIndex = index
-                                    rootItem.folderSelected(modelData.id)
-                                }
-
-                                // 在 ItemDelegate 中添加
                                 MouseArea {
                                     anchors.fill: parent
-                                    acceptedButtons: Qt.RightButton
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     propagateComposedEvents: true
+                                    cursorShape: Qt.PointingHandCursor
 
                                     onClicked: function (mouse) {
                                         if (mouse.button === Qt.RightButton) {
-                                            folderContextMenu.folderData = modelData
-                                            folderContextMenu.folderIndex = index
-                                            folderContextMenu.popup()
+
+                                            // folderContextMenu.folderData = modelData
+                                            // folderContextMenu.folderIndex = index
+                                            // folderContextMenu.popup()
+                                            // if (model && model)
+                                            if (model && model.display) {
+                                                folderContextMenu.folderData = {
+                                                    "name": model.display,
+                                                    "index": index
+                                                }
+                                                folderContextMenu.folderIndex = index
+                                                folderContextMenu.popup()
+                                            }
                                         }
                                         mouse.accepted = false
                                     }
-                                    // 添加文件夹上下文菜单
+                                    onDoubleClicked: function (mouse) {
+                                        if (mouse.button === Qt.LeftButton) {
+
+                                            if (model.display === currentBucket) {
+                                                if (model.display !== breadcrumbNav.getCurrentPath(
+                                                            )) {
+                                                    breadcrumbNav.resetToRoot()
+                                                    breadcrumbNav.addPathItem(
+                                                                model.display,
+                                                                model.display)
+                                                    switchToObjectsModel(
+                                                                model.display)
+                                                    mouse.accepted = true
+                                                } else {
+                                                    switchToObjectsModel(
+                                                                model.display)
+                                                    mouse.accepted = true
+                                                }
+                                                return
+                                            }
+                                            breadcrumbNav.resetToRoot()
+                                            var bucketName = model.display
+                                            currentBucket = bucketName
+                                            bucketListView.currentIndex = index
+                                            breadcrumbNav.addPathItem(
+                                                        bucketName, bucketName)
+                                            switchToObjectsModel(bucketName)
+                                            resetPaginationOnFolderChange()
+                                            mouse.accepted = true
+                                        }
+                                    }
                                     TtMenu {
                                         id: folderContextMenu
                                         property var folderData: null
                                         property int folderIndex: -1
+
+                                        property string bucketName: folderData
+                                                                    && folderData.name ? folderData.name : ""
                                         MenuItem {
                                             text: qsTr("编辑")
                                             onTriggered: {
                                                 console.log("编辑文件夹:",
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
+
                                                 // 实现文件夹编辑逻辑
+                                                // TODO 修改桶名
+                                                if (folderContextMenu.bucketName === "") {
+                                                    console.error("桶名为空，无法编辑")
+                                                    return
+                                                }
+
+                                                // 修改桶名
+                                                // openBucketRenameDialog(
+                                                //             folderContextMenu.bucketName,
+                                                //             folderContextMenu.folderIndex)
                                             }
                                         }
 
                                         MenuItem {
-                                            text: qsTr("删除")
+                                            text: qsTr("删除桶")
                                             onTriggered: {
-                                                console.log("删除文件夹:",
-                                                            folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
-                                                // 实现文件夹删除逻辑
+                                                if (folderContextMenu.bucketName === "") {
+                                                    console.error("桶名为空，无法编辑")
+                                                    return
+                                                }
+                                                // console.log("删除桶:",
+                                                //             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
+                                                // ManagerGlobal.deleteBucket(
+                                                //             folderContextMenu.folderData ? folderContextMenu.folderData.name : "")
+                                                // console.log(folderContextMenu.folderData.name)
+                                                // 🔥 显示确认对话框
+                                                showDeleteBucketConfirmation(
+                                                            folderContextMenu.bucketName)
+                                            }
+                                        }
+                                        MenuSeparator {
+                                            visible: folderContextMenu.bucketName !== ""
+                                        }
+
+                                        MenuItem {
+                                            text: qsTr("刷新")
+                                            onTriggered: {
+                                                console.log("🔄 刷新桶列表")
+                                                ManagerGlobal.refreshBuckets()
                                             }
                                         }
                                     }
                                 }
                             }
-
                             ScrollIndicator.vertical: ScrollIndicator {}
                         }
                     }
@@ -725,162 +2563,105 @@ Item {
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 0
-                        // 面包屑导航条
-                        Rectangle {
-                            id: breadcrumbBar
+                        // 面包屑导航栏
+                        TtBreadcrumbNav {
+                            id: breadcrumbNav
                             Layout.fillWidth: true
-                            height: 40
-                            color: "#F0F2F5"
-
-                            RowLayout {
-                                anchors {
-                                    fill: parent
-                                    leftMargin: 16
-                                    rightMargin: 16
+                            m_model: breadcrumbPathData
+                            // 连接信号
+                            onPathItemClicked: function (itemId) {
+                                console.log("面包屑导航：选择路径项, currentBucket: ",
+                                            itemId, currentBucket)
+                                if (itemId === "root") {
+                                    // 点击了根图标
+                                    console.log("点击了根图标，清除当前模型数据, 切换为桶模型")
+                                    // 2. 清空当前桶名
+                                    rootItem.currentBucket = ""
+                                    // 3. 清除表格所有选中项
+                                    tableView.clearSelection()
+                                    // 4. 重要: 切换表格模型为桶模型
+                                    switchToBucketsModel()
+                                    // 可选：切换回桶列表视图
+                                    bucketListView.currentIndex = -1
+                                    // 重置分页状态 触发一次
+                                } else if (itemId === rootItem.currentBucket) {
+                                    // 点击的是桶名, 刷新当前桶名
+                                    ManagerGlobal.refreshObjects(
+                                                rootItem.currentBucket)
+                                } else {
+                                    // test_dir 不同, 获取的 test_dir 应该需要夹/
+                                    // 如果点击的是路径中的某个文件夹
+                                    ManagerGlobal.refreshObjects(
+                                                rootItem.currentBucket, itemId)
                                 }
-                                spacing: 4
-
-                                // 主页/根目录图标
-                                Rectangle {
-                                    width: 24
-                                    height: 24
-                                    color: "transparent"
-                                    Layout.alignment: Qt.AlignVCenter
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "🏠"
-                                        font.pixelSize: 16
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            // 导航到根目录
-                                            rootItem.folderSelected("all")
-                                        }
-                                    }
-                                }
-
-                                // 动态生成的面包屑路径
-                                Row {
-                                    id: breadcrumbPath
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: 4
-
-                                    // 绑定到当前文件夹路径
-                                    property var currentPath: []
-
-                                    // 使用Repeater动态创建面包屑项
-                                    Repeater {
-                                        model: breadcrumbPath.currentPath
-
-                                        Row {
-                                            spacing: 4
-
-                                            // 分隔符
-                                            Text {
-                                                text: "/"
-                                                font.pixelSize: 14
-                                                color: "#666666"
-                                                verticalAlignment: Text.AlignVCenter
-                                                height: 24
-                                                visible: index > 0
-                                                         || modelData.id !== "all"
-                                            }
-
-                                            // 文件夹名称
-                                            Text {
-                                                text: modelData.name
-                                                font.pixelSize: 14
-                                                color: "#0066CC"
-                                                verticalAlignment: Text.AlignVCenter
-                                                height: 24
-
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        // 导航到此文件夹
-                                                        rootItem.folderSelected(
-                                                                    modelData.id)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                resetPaginationOnFolderChange()
+                            }
+                        }
+                        Rectangle {
+                            width: parent.width
+                            height: 1
+                            Rectangle {
+                                color: "lightblue"
                             }
                         }
 
-                        // 表格标题栏
                         Rectangle {
                             id: headerBar
                             Layout.fillWidth: true
                             height: 40
                             color: "#F5F6FA"
-                            Row {
+                            property var headerTitles: tableView.inBucketMode ? [qsTr("桶名称"), qsTr("区域"), qsTr("创建时间")] : [qsTr("对象名称"), qsTr("大小"), qsTr("更新时间"), qsTr("操作")]
+                            RowLayout {
                                 anchors {
                                     fill: parent
-                                    leftMargin: 16
-                                    rightMargin: 16
+                                    leftMargin: 0
+                                    rightMargin: 0
                                 }
                                 spacing: 0
-                                // 图标列标题
+                                // 对象名称
                                 Rectangle {
-                                    width: rootItem.columnWidths[0]
-                                    height: parent.height
-                                    color: "transparent"
+                                    Layout.preferredWidth: rootItem.columnWidths[0]
+                                    Layout.fillHeight: true
+                                    color: "#F0F4F8" // 稍微不同的背景色
 
                                     Label {
                                         anchors.centerIn: parent
-                                        text: ""
+                                        text: headerBar.headerTitles[0]
                                         font.bold: true
                                     }
+                                    // 右侧边框
+                                    Rectangle {
+                                        width: 1
+                                        height: parent.height
+                                        anchors.right: parent.right
+                                        color: "#E0E0E0" // 边框颜色
+                                    }
                                 }
-                                // 名称列标题
-                                Rectangle {
-                                    width: rootItem.columnWidths[1]
-                                    height: parent.height
-                                    color: "transparent"
 
+                                // 大小
+                                Rectangle {
+                                    Layout.preferredWidth: rootItem.columnWidths[1]
+                                    Layout.fillHeight: true
+                                    color: "#F0F4F8" // 稍微不同的背景色
                                     Label {
-                                        anchors {
-                                            left: parent.left
-                                            leftMargin: 8
-                                            verticalCenter: parent.verticalCenter
-                                        }
-                                        text: "桶名称"
+                                        anchors.centerIn: parent
+                                        text: headerBar.headerTitles[1]
                                         font.bold: true
-                                        Layout.preferredWidth: 300
+                                    }
+                                    // 右侧边框
+                                    Rectangle {
+                                        width: 1
+                                        height: parent.height
+                                        anchors.right: parent.right
+                                        color: "#E0E0E0" // 边框颜色
                                     }
                                 }
-                                // 地区列标题
-                                Rectangle {
-                                    width: rootItem.columnWidths[2]
-                                    height: parent.height
-                                    color: "transparent"
 
-                                    Label {
-                                        anchors {
-                                            left: parent.left
-                                            leftMargin: 8
-                                            verticalCenter: parent.verticalCenter
-                                        }
-                                        text: "地区"
-                                        font.bold: true
-                                        Layout.preferredWidth: 150
-                                    }
-                                }
-                                // 日期列标题
+                                // 修改时间
                                 Rectangle {
-                                    width: rootItem.columnWidths[3]
-                                    height: parent.height
-                                    // color: "transparent"
-                                    color: rootItem.sortColumn == 2 ? "#E3F2FD" : "transparent"
-
+                                    Layout.preferredWidth: rootItem.columnWidths[2]
+                                    Layout.fillHeight: true
+                                    color: rootItem.sortColumn == 2 ? "#E3F2FD" : "#F0F4F8"
                                     MouseArea {
                                         anchors.fill: parent
                                         onClicked: {
@@ -892,598 +2673,2006 @@ Item {
                                             }
                                             sortByColumn(3,
                                                          rootItem.sortAscending)
-                                            // rootItem.sortByColumn(3, rootItem.sortAscending)
                                         }
                                     }
-
                                     RowLayout {
                                         anchors {
-                                            left: parent.left
-                                            leftMargin: 8
-                                            right: parent.right
-                                            rightMargin: 8
+                                            fill: parent
+                                            leftMargin: 0
+                                            rightMargin: 0
                                             verticalCenter: parent.verticalCenter
                                         }
                                         spacing: 4
+                                        Item {
+                                            Layout.fillWidth: true
+                                        } // 左侧弹性空间
 
                                         Label {
-                                            text: "创建时间"
+                                            Layout.alignment: Qt.AlignVCenter
+                                            text: headerBar.headerTitles[2]
                                             font.bold: true
                                         }
 
                                         // 排序指示器
                                         Label {
+                                            Layout.alignment: Qt.AlignVCenter
                                             visible: rootItem.sortColumn == 3
                                             text: rootItem.sortAscending ? "▲" : "▼"
                                             font.pixelSize: 10
                                             font.bold: true
                                             color: "#2980B9"
                                         }
-
                                         Item {
                                             Layout.fillWidth: true
-                                        }
+                                        } // 右侧弹性空间
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.preferredWidth: !tableView.inBucketMode
+                                                           && rootItem.columnWidths.length
+                                                           > 3 ? rootItem.columnWidths[3] : 0
+                                    Layout.fillHeight: true
+                                    color: "#F0F4F8"
+                                    visible: !tableView.inBucketMode // 只有在对象模式中才显示操作列
+
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: headerBar.headerTitles[3] || ""
+                                        font.bold: true
                                     }
                                 }
                             }
                         }
-                        // 表格视图
-                        TableView {
-                            id: tableView
+                        ScrollView {
+                            id: tableScrollView
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            property int editingRow: -1
-                            property int editingColumn: -1
                             clip: true
-                            // 添加排序函数
-                            function sortByColumn(column, ascending) {
-                                // 创建临时数组存储所有数据
-                                let rows = []
-                                for (var i = 0; i < tableModel.rowCount; i++) {
-                                    rows.push(tableModel.getRow(i))
+                            ScrollBar.vertical: ScrollBar {
+                                id: verticalScrollBar
+                                width: 10
+                                background: Rectangle {
+                                    color: "transparent"
                                 }
+                                contentItem: Rectangle {
+                                    implicitWidth: 8
+                                    radius: 4
+                                    color: verticalScrollBar.hovered ? "#808080" : "#C0C0C0"
+                                    opacity: verticalScrollBar.active ? 0.8 : 0.4
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 100
+                                        }
+                                    }
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 100
+                                        }
+                                    }
+                                }
+                            }
+                            ScrollBar.horizontal: ScrollBar {
+                                id: horizontalScrollBar
+                                policy: ScrollBar.AsNeeded
+                                height: 8
+                                padding: 0
+                                background: Rectangle {
+                                    color: "transparent"
+                                }
+                                contentItem: Rectangle {
+                                    implicitHeight: 8
+                                    radius: 4
+                                    color: horizontalScrollBar.hovered ? "#808080" : "#C0C0C0"
+                                    opacity: horizontalScrollBar.active ? 0.8 : 0.4
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 100
+                                        }
+                                    }
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 100
+                                        }
+                                    }
+                                }
+                            }
 
-                                // 根据选定的列排序
-                                rows.sort(function (a, b) {
-                                    let valueA, valueB
+                            TableView {
+                                id: tableView
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                property bool inBucketMode: true // 默认是桶属性
+                                // 编辑
+                                property int editingRow: -1
+                                property int editingColumn: -1
+                                model: tableView.inBucketMode ? ManagerGlobal.getBucketsModel(
+                                                                    ) : ManagerGlobal.getObjectsModel()
+                                Behavior on contentY {
+                                    enabled: false // 禁用滚动动画，优化性能
+                                }
+                                // 在 TableView 中添加
+                                Connections {
+                                    target: tableView.model
 
-                                    // 根据列选择字段
-                                    if (column === 1) {
-                                        valueA = a.name ? a.name.toLowerCase(
-                                                              ) : ""
-                                        valueB = b.name ? b.name.toLowerCase(
-                                                              ) : ""
-                                    } else if (column === 2) {
-                                        valueA = a.zone ? a.zone.toLowerCase(
-                                                              ) : ""
-                                        valueB = b.zone ? b.zone.toLowerCase(
-                                                              ) : ""
-                                    } else if (column === 3) {
-                                        // 处理日期排序 - 使用日期格式解析
-                                        valueA = rootItem.parseDateString(
-                                                    a.date)
-                                        valueB = rootItem.parseDateString(
-                                                    b.date)
-                                    } else {
-                                        return 0 // 不支持的列
+                                    function onDataChanged(topLeft, bottomRight, roles) {
+                                        console.log("📊 模型数据已更新")
+                                        try {
+                                            // 🔥 更新记录数
+                                            var oldCount = rootItem.currentRecordCount
+                                            rootItem.currentRecordCount
+                                                    = rootItem.updateRecordCount()
+
+                                            console.log("📊 记录数变化:",
+                                                        oldCount, "->",
+                                                        rootItem.currentRecordCount)
+
+                                            // 🔥 如果记录数变化，可能需要调整当前页
+                                            if (oldCount !== rootItem.currentRecordCount) {
+                                                var maxPage = Math.ceil(
+                                                            rootItem.currentRecordCount
+                                                            / rootItem.currentPerPage)
+                                                if (rootItem.currentPage > maxPage
+                                                        && maxPage > 0) {
+                                                    console.log("⚠️ 当前页超出范围，调整到最后一页:",
+                                                                maxPage)
+                                                    rootItem.currentPage = maxPage
+                                                }
+                                            }
+
+                                            // 🔥 强制刷新布局
+                                            tableView.forceLayout()
+                                        } catch (e) {
+                                            console.error("❌ 处理数据变化失败:", e)
+                                        }
                                     }
 
-                                    // 升序/降序比较
-                                    if (ascending) {
-                                        if (valueA < valueB)
-                                            return -1
-                                        if (valueA > valueB)
-                                            return 1
+                                    // function onModelReset() {
+                                    //     // console.log("模型重置")
+                                    //     rootItem.currentRecordCount = updateRecordCount()
+                                    //     updatePaginationState()
+                                    // }
+                                    function onModelReset() {
+                                        console.log("🔄 模型重置")
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
+
+                                        // 🔥 重置到第一页
+                                        rootItem.currentPage = 1
+
+                                        rootItem.updatePaginationState()
+                                    }
+
+                                    function onRowsInserted(parent, first, last) {
+                                        console.log("➕ 行被插入:", first, "到", last)
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
+                                    }
+
+                                    function onRowsRemoved(parent, first, last) {
+                                        console.log("➖ 行被移除:", first, "到", last)
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
+                                    }
+
+                                    // function onRowsInserted() {
+                                    //     // console.log("行被插入")
+                                    //     rootItem.updateRecordCount() // 更新记录数
+                                    // }
+
+                                    // function onRowsRemoved() {
+                                    //     rootItem.updateRecordCount() // 更新记录数
+                                    // }
+                                }
+                                function sortByColumn(column, ascending) {
+                                    let rows = []
+                                    for (var i = 0; i < tableModel.rowCount; i++) {
+                                        rows.push(tableModel.getRow(i))
+                                    }
+                                    rows.sort(function (a, b) {
+                                        let valueA, valueB
+                                        if (column === 1) {
+                                            valueA = a.name ? a.name.toLowerCase(
+                                                                  ) : ""
+                                            valueB = b.name ? b.name.toLowerCase(
+                                                                  ) : ""
+                                        } else if (column === 2) {
+                                            valueA = a.zone ? a.zone.toLowerCase(
+                                                                  ) : ""
+                                            valueB = b.zone ? b.zone.toLowerCase(
+                                                                  ) : ""
+                                        } else if (column === 3) {
+                                            valueA = rootItem.parseDateString(
+                                                        a.date)
+                                            valueB = rootItem.parseDateString(
+                                                        b.date)
+                                        } else {
+                                            return 0
+                                        }
+                                        if (ascending) {
+                                            if (valueA < valueB)
+                                                return -1
+                                            if (valueA > valueB)
+                                                return 1
+                                            return 0
+                                        } else {
+                                            if (valueA > valueB)
+                                                return -1
+                                            if (valueA < valueB)
+                                                return 1
+                                            return 0
+                                        }
+                                    })
+                                    tableModel.clear()
+                                    for (var i = 0; i < rows.length; i++) {
+                                        tableModel.appendRow(rows[i])
+                                    }
+                                }
+                                columnWidthProvider: function (column) {
+                                    try {
+                                        if (column < 0
+                                                || !rootItem.columnWidths) {
+                                            return 0
+                                        }
+                                        if (column === 3) {
+                                            if (tableView.inBucketMode) {
+                                                return 0
+                                            } else {
+                                                var width = rootItem.columnWidths.length
+                                                        > 3 ? rootItem.columnWidths[3] : 100
+                                                return width
+                                            }
+                                        }
+
+                                        // 其他列
+                                        if (column >= rootItem.columnWidths.length)
+                                            return 0
+
+                                        return rootItem.columnWidths[column]
+                                    } catch (e) {
+                                        console.warn("列宽计算错误:", e)
                                         return 0
-                                    } else {
-                                        if (valueA > valueB)
-                                            return -1
-                                        if (valueA < valueB)
-                                            return 1
+                                    }
+                                }
+                                rowHeightProvider: function (row) {
+                                    try {
+                                        if (!model) {
+                                            return 0
+                                        }
+                                        // 检查模型是否有效
+                                        if (typeof model.rowCount !== 'function') {
+                                            return 0
+                                        }
+
+                                        // 严格检查行是否在有效范围内
+                                        const rowCount = model.rowCount()
+                                        if (row < 0 || row >= rowCount) {
+                                            return 0
+                                        }
+                                        // 使用函数获取最新的分页范围值
+                                        const isInCurrentPage = row >= rootItem.getPageStartRow()
+                                                              && row <= rootItem.getPageEndRow()
+                                        // console.log("start end: ",
+                                        //             rootItem.pageStartRow,
+                                        //             rootItem.pageEndRow)
+
+                                        // 如果不在当前页，返回高度0（实际隐藏该行）
+                                        if (!isInCurrentPage) {
+                                            // console.log("行不在当前页范围内，返回高度0:",
+                                            //             row,
+                                            //             rootItem.getPageStartRow(
+                                            //                 ),
+                                            //             rootItem.getPageEndRow(
+                                            //                 ))
+                                            return 0
+                                        }
+                                        // console.log("计算行高:", row, "在当前页内:",
+                                        //             isInCurrentPage)
+
+                                        // 否则返回标准行高
+                                        return 50
+                                    } catch (e) {
+                                        console.warn("行高计算错误:", e)
                                         return 0
                                     }
-                                })
+                                }
+                                function isValidRow(row) {
+                                    if (!tableView.model) {
+                                        return false
+                                    }
+                                    return row >= rootItem.getPageStartRow()
+                                            && row <= rootItem.getPageEndRow()
+                                }
+                                property var selectedItems: []
+                                // delegate: DelegateChooser {
+                                //     // 基于列号的委托
+                                //     role: "column"
+                                //     // 对象名称
+                                //     DelegateChoice {
+                                //         column: 0
+                                //         delegate: Rectangle {
+                                //             id: nameCell
+                                //             width: tableView.columnWidthProvider(
+                                //                        0)
+                                //             implicitWidth: tableView.columnWidthProvider(
+                                //                                0)
+                                //             property bool isEditing: tableView.editingRow === row
+                                //                                      && tableView.editingColumn
+                                //                                      === 1
+                                //             // 行范围检查函数
+                                //             visible: tableView.isValidRow(row)
+                                //             // 添加动态属性，使用函数而不是绑定表达式，确保每次访问都重新计算
+                                //             function isFolderType() {
+                                //                 try {
+                                //                     // 获取当前行数据
+                                //                     // const rowData = tableView.adapterModel ? tableView.adapterModel.getRow(row) : null
+                                //                     // 拿到索引
+                                //                     var idx = tableView.model.index(
+                                //                                 row, 0)
+                                //                     // BUG 索引也是不对的
+                                //                     if (idx && idx.isValid) {
+                                //                         // 2) 用 Qt.UserRole 取出 C++ 那个 QVariantMap
+                                //                         console.log("正常的索引")
+                                //                         var userData = tableView.model.data(
+                                //                                     idx,
+                                //                                     Qt.UserRole)
+                                //                         if (userData
+                                //                                 && userData.isFolder
+                                //                                 !== undefined) {
+                                //                             return userData.isFolder // 一定要 return
+                                //                         }
+                                //                     } else {
 
-                                // 清除当前数据并按排序顺序重新添加
-                                tableModel.clear()
-                                for (var i = 0; i < rows.length; i++) {
-                                    tableModel.appendRow(rows[i])
-                                }
-                            }
-                            // 宽度
-                            columnWidthProvider: function (column) {
-                                return column < rootItem.columnWidths.length ? rootItem.columnWidths[column] : 100
-                            }
-                            // 行高
-                            rowHeightProvider: function (row) {
-                                return 50
-                            }
-                            // 设置模型
-                            model: TableModel {
-                                id: tableModel
-                                // 定义列
-                                TableModelColumn {
-                                    display: "icon"
-                                }
-                                TableModelColumn {
-                                    display: "name"
-                                }
-                                TableModelColumn {
-                                    display: "zone"
-                                }
-                                TableModelColumn {
-                                    display: "date"
-                                }
-                            }
-                            // 创建刷新数据的函数
-                            function refreshData() {
-                                // 清除现有数据
-                                tableModel.clear()
+                                //                         // 这里也会输出
+                                //                         // console.log("获取不正常的索引")
+                                //                     }
 
-                                // 获取选中的文件夹ID
-                                const selectedFolderId = folderListView.currentItem
-                                                       && folderListView.currentItem.modelData ? folderListView.currentItem.modelData.id : "all"
-                                if (rootItem.sortColumn !== -1) {
-                                    sortByColumn(rootItem.sortColumn,
-                                                 rootItem.sortAscending)
-                                }
+                                //                     // 3) 回退：文件名末尾带斜杠就当作文件夹
+                                //                     var name = model.display
+                                //                             || ""
+                                //                     return name.endsWith("/")
+                                //                 } catch (e) {
+                                //                     console.error("判断文件夹错误:", e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     // 使用直接的 row 标识符而不依赖于 tableModel
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+                                //             implicitHeight: 50
+                                //             RowLayout {
+                                //                 anchors {
+                                //                     fill: parent
+                                //                     leftMargin: 8
+                                //                     rightMargin: 8
+                                //                 }
+                                //                 spacing: 8
+                                //                 Text {
+                                //                     id: fileIcon
+                                //                     text: {
+                                //                         if (tableView.inBucketMode) {
+                                //                             return "🪣"
+                                //                         } else {
+                                //                             return nameCell.isFolderType(
+                                //                                         ) ? "📁" : "📄"
+                                //                         }
+                                //                     }
+                                //                     font.pixelSize: 18
+                                //                     color: {
+                                //                         if (tableView.inBucketMode) {
+                                //                             return "#1E88E5" // 桶图标颜色
+                                //                         } else {
+                                //                             return nameCell.isFolderType(
+                                //                                         ) ? "#2980B9" : "#333333"
+                                //                         }
+                                //                     }
+                                //                     Layout.preferredWidth: 24
+                                //                 }
+                                //                 Text {
+                                //                     id: cellText
+                                //                     Layout.fillWidth: true
+                                //                     text: {
+                                //                         let name = model.display
+                                //                             || "未命名"
+                                //                         return nameCell.isFolderType()
+                                //                                 && name.endsWith(
+                                //                                     '/') ? name.substring(0, name.length - 1) : name
+                                //                     }
+                                //                     elide: Text.ElideRight
+                                //                     visible: !nameCell.isEditing
+                                //                     color: nameCell.isFolderType(
+                                //                                ) ? "#2980B9" : "#333333"
+                                //                     font.bold: nameCell.isFolderType()
+                                //                     font.underline: nameCell.isFolderType()
+                                //                 }
+                                //                 // 添加模型变更监听
+                                //                 Component.onCompleted: {
 
-                                // 加载文件数据
-                                if (instanceBuckets
-                                        && typeof instanceBuckets.bucketCount === "function") {
-                                    for (var i = 0; i < instanceBuckets.bucketCount(
-                                             ); i++) {
-                                        const name = instanceBuckets.getBucketData(
-                                                       i, 0)
-                                        const location = instanceBuckets.getBucketData(
-                                                           i, 1) || "未知"
-                                        const date = instanceBuckets.getBucketData(
-                                                       i, 2) || "未知"
-                                        // 如果是"全部文件"或者匹配当前选中的存储桶
-                                        if (selectedFolderId === "all"
-                                                || selectedFolderId === name) {
-                                            tableModel.appendRow({
-                                                                     "icon": "📁",
-                                                                     "name": name,
-                                                                     "size": "存储桶",
-                                                                     "zone": location,
-                                                                     "date": date,
-                                                                     "id": "file" + i,
-                                                                     "isFolder": true
-                                                                 })
-                                        }
-                                        // 如果已经有排序设置，应用排序
-                                        if (rootItem.sortColumn !== -1) {
-                                            sortByColumn(rootItem.sortColumn,
-                                                         rootItem.sortAscending)
+                                //                 }
+                                //             }
+                                //             // 处理点击事件
+                                //             MouseArea {
+                                //                 id: mouseArea
+                                //                 anchors.fill: parent
+                                //                 hoverEnabled: true
+                                //                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                //                 cursorShape: Qt.PointingHandCursor
+                                //                 propagateComposedEvents: !nameCell.isEditing
+                                //                 property var root: rootItem
+                                //                 onClicked: function (mouse) {
+                                //                     console.log("Clicked on row",
+                                //                                 row)
+                                //                     try {
+                                //                         // 如果当前是桶模型模式，点击处理不同
+                                //                         if (tableView.inBucketMode) {
+                                //                             if (mouse.button === Qt.LeftButton) {
+                                //                                 // 获取桶名
+                                //                                 const bucketName = model.display
+                                //                                 // 普通点击只是选择，不导航
+                                //                                 tableView.clearSelection()
+                                //                             } else if (mouse.button
+                                //                                        === Qt.RightButton) {
+                                //                                 bucketContextMenu.bucketName
+                                //                                         = model.display
+                                //                                 bucketContextMenu.rowIndex = row
+                                //                                 bucketContextMenu.popup()
+                                //                             }
+                                //                         } else {
+                                //                             const isFolder = nameCell.isFolderType()
+                                //                             // 这里保存对应的行信息
+                                //                             if (mouse.button === Qt.LeftButton) {
+                                //                                 // 左键点击
+                                //                                 if (mouse.modifiers
+                                //                                         & Qt.ControlModifier) {
+                                //                                     // 构建行信息
+                                //                                     const rowData = {
+                                //                                         "id": "obj" + row,
+                                //                                         "name": display
+                                //                                     }
+                                //                                     // 从模型中获取 UserRole 数据
+                                //                                     // 这里获取的 idx 是有效的 ???
+                                //                                     var idx = tableView.model.index(
+                                //                                                 row, 0)
+                                //                                     if (idx && idx.valid) {
+                                //                                         console.log("有效的 idx")
+                                //                                         var userData = tableView.model.data(idx, Qt.UserRole)
+                                //                                         if (userData) {
+                                //                                             // 添加下载所需的关键信息
+                                //                                             rowData.key = userData.key || ""
+                                //                                             rowData.size = userData.size || 0
+                                //                                             rowData.isFolder = userData.isFolder || false
+                                //                                             rowData.lastModified = userData.lastModified || ""
+                                //                                         }
+                                //                                     }
+                                //                                     // 上面是无效的
+                                //                                     // 如果没有获取到 key，使用 name 作为备选
+                                //                                     if (!rowData.key) {
+                                //                                         rowData.key = rowData.name
+                                //                                     }
+                                //                                     // 获取的 key 是完整路径
+                                //                                     console.log("Ctrl+点击选择项目:",
+                                //                                                 rowData.name,
+                                //                                                 "key:",
+                                //                                                 rowData.key,
+                                //                                                 "size:",
+                                //                                                 rowData.size)
+                                //                                     // 添加的数据
+                                //                                     tableView.toggleSelection(
+                                //                                                 rowData)
+                                //                                 } else {
+                                //                                     // 普通点击: 单选
+                                //                                     tableView.clearSelection()
+                                //                                 }
+                                //                             } else if (mouse.button
+                                //                                        === Qt.RightButton) {
+                                //                                 // 右键菜单
+                                //                                 // 出现问题, 唯有 isFolder 属性
+                                //                                 const rowData = {
+                                //                                     "id": "obj" + row,
+                                //                                     "name": display
+                                //                                             || ""
+                                //                                 }
+                                //                                 var idx = tableView.model.index(
+                                //                                             row,
+                                //                                             0)
+                                //                                 if (idx && idx.valid) {
+                                //                                     console.log("有效的 idx")
+                                //                                     var userData = tableView.model.data(idx, Qt.UserRole)
+                                //                                     if (userData) {
+                                //                                         // 添加下载所需的关键信息
+                                //                                         rowData.key = userData.key
+                                //                                                 || ""
+                                //                                         // rowData.size = userData.size
+                                //                                         // || 0
+                                //                                         // rowData.isFolder = userData.isFolder || false
+                                //                                         // rowData.lastModified = userData.lastModified || ""
+                                //                                     }
+                                //                                 }
+                                //                                 // 上面是无效的
+                                //                                 // 如果没有获取到 key，使用 name 作为备选
+                                //                                 if (!rowData.key) {
+                                //                                     rowData.key = rowData.name
+                                //                                 }
+
+                                //                                 // 获取的 key 是完整路径
+                                //                                 // 完整的 key
+                                //                                 // console.log("Ctrl+点击选择项目:",
+                                //                                 //             rowData.name,
+                                //                                 //             "key:",
+                                //                                 //             rowData.key,
+                                //                                 //             "size:",
+                                //                                 //             rowData.size)
+                                //                                 if (!tableView.isItemSelected(
+                                //                                             rowData.id)) {
+                                //                                     // 当前不是选中的状态
+                                //                                     tableView.clearSelection()
+                                //                                     tableView.toggleSelection(
+                                //                                                 rowData)
+                                //                                 }
+                                //                                 // 准备上下文菜单数据
+                                //                                 contextMenu.rowData = rowData
+                                //                                 // 缺少属性
+                                //                                 contextMenu.rowIndex = row
+                                //                                 contextMenu.popup()
+                                //                             }
+                                //                         }
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "处理点击事件时出错:",
+                                //                                     e)
+                                //                     }
+                                //                 }
+                                //                 onDoubleClicked: function (mouse) {
+                                //                     if (mouse.button === Qt.LeftButton) {
+                                //                         if (tableView.inBucketMode) {
+                                //                             console.log("打开桶列表: ",
+                                //                                         model.display)
+                                //                             currentBucket = model.display
+                                //                             handleOpenBucket(
+                                //                                         currentBucket)
+                                //                             return
+                                //                         }
+                                //                         const isFolder = nameCell.isFolderType()
+                                //                         if (!isFolder) {
+                                //                             console.log("双击的不是文件夹, 忽略操作")
+                                //                             return
+                                //                         }
+                                //                         var rowData = {
+                                //                             "id": "obj" + row,
+                                //                             "name": display
+                                //                                     || ""
+                                //                         }
+                                //                         if (!rowData) {
+                                //                             console.error(
+                                //                                         "无法获取行数据:",
+                                //                                         row)
+                                //                             return
+                                //                         }
+                                //                         var currentObjectModel = tableView.model
+                                //                         var indexCol0 = currentObjectModel.index(
+                                //                                     row, 0)
+                                //                         if (indexCol0
+                                //                                 && indexCol0.valid) {
+                                //                             // 名字
+                                //                             var userRoleDataMap = currentObjectModel.data(
+                                //                                         indexCol0,
+                                //                                         Qt.UserRole)
+                                //                             if (userRoleDataMap) {
+                                //                                 rowData.isFolder
+                                //                                         = userRoleDataMap.isFolder
+                                //                                 rowData.key = userRoleDataMap.key
+                                //                                 rowData.size = userRoleDataMap.size
+                                //                                 rowData.date = userRoleDataMap.lastModified
+                                //                             } else {
+                                //                                 console.warn(
+                                //                                             "UserRole data missing for row:",
+                                //                                             row,
+                                //                                             "name:",
+                                //                                             rowData.name)
+                                //                                 rowData.isFolder
+                                //                                         = (rowData.name
+                                //                                            && rowData.name.endsWith(
+                                //                                                '/'))
+                                //                                 rowData.key = rowData.name
+
+                                //                                 var indexCol1 = currentObjectModel.index(
+                                //                                             row,
+                                //                                             1)
+                                //                                 if (indexCol1
+                                //                                         && indexCol1.valid)
+                                //                                     rowData.size = currentObjectModel.data(indexCol1, Qt.DisplayRole)
+
+                                //                                 var indexCol2 = currentObjectModel.index(
+                                //                                             row,
+                                //                                             2)
+                                //                                 if (indexCol2
+                                //                                         && indexCol2.valid)
+                                //                                     rowData.date = currentObjectModel.data(indexCol2, Qt.DisplayRole)
+                                //                             }
+                                //                         } else {
+                                //                             console.error(
+                                //                                         "双击处理：无法获取行 ",
+                                //                                         row,
+                                //                                         " 的有效索引。")
+                                //                             return
+                                //                         }
+                                //                         if (rowData.isFolder !== isFolder) {
+                                //                             console.warn("双击处理：rowData.isFolder (" + rowData.isFolder + ") 与 nameCell.isFolderType() (" + isFolder + ") 不一致。 UserRole/derived data is used for rowData.")
+                                //                         }
+
+                                //                         console.log("打开文件夹:",
+                                //                                     rowData.name,
+                                //                                     "(Key:",
+                                //                                     rowData.key,
+                                //                                     "IsFolder:",
+                                //                                     rowData.isFolder,
+                                //                                     ")")
+
+                                //                         const keyToNavigate = rowData.key
+                                //                                             || (rowData.name && rowData.name.endsWith('/') ? rowData.name : rowData.name + '/')
+
+                                //                         ManagerGlobal.refreshObjects(
+                                //                                     currentBucket,
+                                //                                     keyToNavigate)
+
+                                //                         console.log("记录数: ",
+                                //                                     currentObjectModel.rowCount(
+                                //                                         ))
+
+                                //                         const displayName = rowData.name.endsWith('/') ? rowData.name.substring(0, rowData.name.length - 1) : rowData.name
+                                //                         console.log("双击打开文件夹和路径:",
+                                //                                     keyToNavigate,
+                                //                                     displayName)
+                                //                         breadcrumbNav.addPathItem(
+                                //                                     keyToNavigate,
+                                //                                     displayName)
+                                //                         resetPaginationOnFolderChange()
+                                //                     }
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                //     // 文件大小
+                                //     DelegateChoice {
+                                //         column: 1
+                                //         delegate: Rectangle {
+                                //             visible: tableView.isValidRow(row)
+                                //             implicitHeight: 50
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+
+                                //             Text {
+                                //                 anchors {
+                                //                     verticalCenter: parent.verticalCenter
+                                //                 }
+                                //                 text: display || ""
+                                //                 color: "#555555"
+                                //                 elide: Text.ElideRight
+                                //                 width: parent.width - 16
+                                //             }
+                                //             // 添加行选择效果
+                                //             MouseArea {
+                                //                 anchors.fill: parent
+                                //                 onClicked: {
+                                //                     console.log("Current Row",
+                                //                                 row)
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                //     // 日期
+                                //     DelegateChoice {
+                                //         column: 2
+                                //         delegate: Rectangle {
+                                //             // 仅在行有效时显示
+                                //             visible: tableView.isValidRow(row)
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+                                //             implicitHeight: 50
+                                //             Text {
+                                //                 anchors {
+                                //                     verticalCenter: parent.verticalCenter
+                                //                 }
+                                //                 text: display || ""
+                                //                 color: "#555555"
+                                //                 elide: Text.ElideRight
+                                //                 width: parent.width - 16
+                                //             }
+                                //         }
+                                //     }
+                                //     DelegateChoice {
+                                //         column: 3 // 操作列
+                                //         delegate: Rectangle {
+                                //             id: operationCell
+                                //             visible: tableView.isValidRow(row)
+                                //                      && !tableView.inBucketMode
+                                //             implicitHeight: 50
+                                //             color: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return "#FFFFFF"
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj"
+                                //                                 + row) ? "#E3F2FD" : "#FFFFFF"
+                                //                 } catch (e) {
+                                //                     return "#FFFFFF"
+                                //                 }
+                                //             }
+                                //             Button {
+                                //                 id: modernDownloadButton
+                                //                 anchors.centerIn: parent
+                                //                 width: 70
+                                //                 Layout.preferredHeight: 28 // 设定固定高度, 会影响表格的行高
+                                //                 visible: {
+                                //                     // 之前第一次进入是无效的, 但是后面获取数据时，就会变得有效
+                                //                     // 构造的时候缺少数据, 访问 undefined, 这是 qml 的什么机制 ???
+                                //                     // 基本条件检查
+                                //                     if (tableView.inBucketMode) {
+                                //                         return false
+                                //                     }
+
+                                //                     if (!model) {
+                                //                         return false
+                                //                     }
+
+                                //                     // 获取文件名
+                                //                     var fileName = ""
+                                //                     try {
+                                //                         fileName = model.display
+                                //                                 || ""
+                                //                     } catch (e) {
+                                //                         return false
+                                //                     }
+
+                                //                     if (!fileName) {
+                                //                         return false
+                                //                     }
+
+                                //                     // 简单判断：文件夹以 / 结尾
+                                //                     return !fileName.endsWith(
+                                //                                 "/")
+                                //                 }
+                                //                 function updateVisibility() {
+                                //                     try {
+                                //                         if (tableView.inBucketMode) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         // 检查模型数据是否有效
+                                //                         if (!model
+                                //                                 || model.display === undefined) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         var fileName = model.display
+                                //                                 || ""
+                                //                         if (!fileName) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         // 尝试从模型获取更详细的信息
+                                //                         var idx = tableView.model.index(
+                                //                                     row, 0)
+                                //                         if (idx && idx.isValid) {
+                                //                             var userData = tableView.model.data(
+                                //                                         idx,
+                                //                                         Qt.UserRole)
+                                //                             if (userData
+                                //                                     && userData.isFolder
+                                //                                     !== undefined) {
+                                //                                 visible = !userData.isFolder
+                                //                                 return
+                                //                             }
+                                //                         }
+
+                                //                         var isFolder = fileName.endsWith(
+                                //                                     "/")
+                                //                         visible = !isFolder
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "updateVisibility 出错:",
+                                //                                     e)
+                                //                         visible = false
+                                //                     }
+                                //                 }
+
+                                //                 background: Rectangle {
+                                //                     radius: 6
+                                //                     color: parent.hovered ? "#EFF6FF" : "#F0F9FF"
+                                //                     border.color: parent.hovered ? "#3B82F6" : "transparent"
+                                //                     border.width: parent.hovered ? 1 : 0
+                                //                     layer.enabled: true
+                                //                     layer.effect: DropShadow {
+                                //                         horizontalOffset: 0
+                                //                         verticalOffset: 1
+                                //                         radius: 3
+                                //                         samples: 6
+                                //                         color: "#20000000"
+                                //                     }
+                                //                 }
+                                //                 contentItem: RowLayout {
+                                //                     anchors.centerIn: parent
+                                //                     spacing: 4
+
+                                //                     Text {
+                                //                         text: "⬇"
+                                //                         font.pixelSize: 12
+                                //                         color: "#1D4ED8"
+                                //                         Layout.alignment: Qt.AlignVCenter
+                                //                     }
+
+                                //                     Text {
+                                //                         text: "下载"
+                                //                         font.pixelSize: 10
+                                //                         font.weight: Font.Medium
+                                //                         color: "#1D4ED8"
+                                //                         Layout.alignment: Qt.AlignVCenter
+                                //                         elide: Text.ElideRight
+                                //                     }
+                                //                 }
+                                //                 onClicked: {
+                                //                     try {
+                                //                         if (!tableView.model) {
+                                //                             console.error(
+                                //                                         "表格模型无效")
+                                //                             return
+                                //                         }
+                                //                         const totalRows = tableView.model.rowCount()
+                                //                         // 4. 验证行是否在当前分页范围内（使用显示行索引）
+                                //                         if (!tableView.isValidRow(
+                                //                                     row)) {
+                                //                             console.error(
+                                //                                         "行不在当前分页范围内:",
+                                //                                         row)
+                                //                             return
+                                //                         }
+                                //                         var fileInfo = {
+                                //                             "id": "obj" + row,
+                                //                             "name": model.display
+                                //                                     || "未知文件"
+                                //                         }
+                                //                         // 设置正确, 但是这里获取的是 行号, 而非 data 值
+                                //                         // 永远是 2 ???
+                                //                         // console.log("get the name: ",
+                                //                         //             fileInfo.name)
+                                //                         // 获取该行的有效数据
+                                //                         var idx = tableView.model.index(
+                                //                                     row, 0)
+                                //                         if (idx || idx.isValid) {
+                                //                             // fileInfo.name = tableView.model.data(
+                                //                             //             idx,
+                                //                             //             Qt.DisplayRole)
+                                //                             // // 读取的名字是正确的
+                                //                             // console.log("主动读取 display role: ",
+                                //                             //             fileInfo.name)
+
+                                //                             // }
+                                //                             var userData = tableView.model.data(
+                                //                                         idx,
+                                //                                         Qt.UserRole)
+                                //                             if (userData) {
+                                //                                 fileInfo.key = userData.key
+                                //                                         || ""
+                                //                                 fileInfo.size = userData.size
+                                //                                         || 0
+                                //                                 fileInfo.isFolder
+                                //                                         = userData.isFolder
+                                //                                         || false
+                                //                                 fileInfo.lastModified
+                                //                                         = userData.lastModified
+                                //                                         || ""
+                                //                             } else {
+                                //                                 console.warn(
+                                //                                             "UserRole 数据无效，使用默认值:",
+                                //                                             fileInfo)
+                                //                             }
+                                //                         }
+                                //                         // name 是名字, key 是路径加+名字
+                                //                         console.log("点击下载按钮选择项目:",
+                                //                                     fileInfo.name,
+                                //                                     "key:",
+                                //                                     fileInfo.key,
+                                //                                     "size:",
+                                //                                     fileInfo.size)
+                                //                         rootItem.addDownloadTask(
+                                //                                     fileInfo)
+                                //                         // downloadPanel.open()
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "下载处理错误:",
+                                //                                     e)
+                                //                     }
+                                //                 }
+                                //                 TtToolTip {
+                                //                     text: qsTr("打开文件位置")
+                                //                     visible: parent.hovered
+                                //                     delay: 500
+                                //                     arrowPosition: "auto"
+                                //                 }
+                                //                 scale: hovered ? 1.05 : 1.0
+                                //                 Behavior on scale {
+                                //                     NumberAnimation {
+                                //                         duration: 100
+                                //                     }
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                delegate: Rectangle {
+                                    id: cellContainer
+
+                                    // 基本属性
+                                    implicitWidth: tableView.columnWidthProvider(
+                                                       column) || 100
+                                    implicitHeight: 50
+                                    visible: tableView.isValidRow(row)
+
+                                    // 选中状态计算
+                                    property bool isItemSelected: {
+                                        try {
+                                            if (!tableView.selectedItems)
+                                                return false
+                                            return tableView.selectedItems.some(
+                                                        item => item.id === "obj" + row)
+                                        } catch (e) {
+                                            return false
                                         }
                                     }
-                                }
-                            }
-                            // 选中项目的列表
-                            property var selectedItems: []
 
-                            // 自定义委托
-                            delegate: DelegateChooser {
-                                role: "column"
-
-                                // 图标列
-                                DelegateChoice {
-                                    column: 0
-                                    delegate: Rectangle {
-                                        color: "transparent"
-                                        implicitHeight: 50
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: display
-                                            font.pixelSize: 18
+                                    // 背景色
+                                    color: {
+                                        if (isItemSelected) {
+                                            return "#E3F2FD" // 选中时的蓝色背景
+                                        } else if (cellMouseArea.containsMouse) {
+                                            return "#F5F5F5" // 鼠标悬停时的浅灰色
+                                        } else {
+                                            return "#FFFFFF" // 🔥 统一使用白色背景，取消奇偶行颜色差异
                                         }
                                     }
-                                }
 
-                                // 名称列
-                                DelegateChoice {
-                                    column: 1
-                                    delegate: Rectangle {
-                                        id: nameCell
-                                        // property bool isEditing: false
-                                        property bool isEditing: tableView.editingRow === row
-                                                                 && tableView.editingColumn === 1
-                                        color: {
-                                            const isSelected = tableView.selectedItems.some(
-                                                                 item => item.id
-                                                                 === tableModel.getRow(
-                                                                     row).id)
-                                            return isSelected ? "#E3F2FD" : (row % 2 === 0 ? "#FFFFFF" : "#F8F9FA")
+                                    border.color: "#E9ECEF"
+                                    border.width: 0.5
+
+                                    function isFolderType() {
+                                        try {
+                                            if (tableView.inBucketMode) {
+                                                return false
+                                            }
+                                            // 拿到索引
+                                            // var idx = tableView.model.index(
+                                            //             row, 0)
+                                            // 永远获取不到
+                                            // if (idx && idx.isValid) {
+                                            //     // 2) 用 Qt.UserRole 取出 C++ 那个 QVariantMap
+                                            //     console.log("正常的索引")
+                                            //     var userData = tableView.model.data(
+                                            //                 idx, Qt.UserRole)
+                                            //     if (userData
+                                            //             && userData.isFolder !== undefined) {
+                                            //         return userData.isFolder // 一定要 return
+                                            //     }
+                                            // } else {
+                                            //     // 这里也会输出
+                                            //     // 输出
+                                            //     console.log("获取不正常的索引")
+                                            // }
+
+                                            // 3) 回退：文件名末尾带斜杠就当作文件夹
+                                            var name = model.display || ""
+                                            return name.endsWith("/")
+                                        } catch (e) {
+                                            console.error("判断文件夹错误:", e)
+                                            return false
                                         }
-                                        implicitHeight: 50
-                                        Text {
-                                            id: cellText
-                                            anchors {
-                                                left: parent.left
-                                                leftMargin: 8
-                                                verticalCenter: parent.verticalCenter
-                                            }
-                                            text: display
-                                            elide: Text.ElideRight
-                                            width: parent.width - 16
-                                            font.bold: tableModel.getRow(
-                                                           row).isFolder
-                                            // 添加此条件，在编辑模式下隐藏
-                                            visible: !nameCell.isEditing
-                                        }
-                                        // 编辑框
-                                        TextField {
-                                            id: editField
-                                            anchors {
-                                                left: parent.left
-                                                leftMargin: 4
-                                                right: parent.right
-                                                rightMargin: 4
-                                                verticalCenter: parent.verticalCenter
-                                            }
-                                            text: display
-                                            visible: nameCell.isEditing
-                                            selectByMouse: true
-                                            // 添加不透明背景
-                                            background: Rectangle {
-                                                color: nameCell.color // 使用与单元格相同的背景色
-                                                border.color: editField.focus ? "#3498db" : "#DDDDDD"
-                                                border.width: 1
-                                                radius: 2
-                                            }
-                                            Component.onCompleted: {
-                                                if (nameCell.isEditing) {
-                                                    forceActiveFocus()
-                                                    selectAll()
-                                                }
-                                            }
-                                            // 修改编辑字段的 onAccepted 处理器
-                                            onAccepted: {
-                                                // 保存编辑后的值
-                                                if (text !== display) {
-                                                    // 调用 InstanceBuckets 中的方法更新模型
-                                                    if (instanceBuckets
-                                                            && typeof instanceBuckets.updateBucketName === "function") {
-                                                        if (instanceBuckets.updateBucketName(
-                                                                    row,
-                                                                    text)) {
-                                                            console.log("重命名项目:",
-                                                                        display,
-                                                                        "为",
-                                                                        text,
-                                                                        "并更新了模型")
-                                                        } else {
-                                                            console.error(
-                                                                        "重命名失败")
-                                                        }
-                                                    } else {
-                                                        console.error(
-                                                                    "updateBucketName 方法不可用")
+                                    }
+                                    // function isFolderType() {
+                                    //     try {
+                                    //         if (tableView.inBucketMode) {
+                                    //             return false // 桶模式下不存在文件夹概念
+                                    //         }
+                                    //         // 这个方法, 图标有效, 按钮无效
+                                    //         // 🔥 优先使用 UserRole 数据
+                                    //         // 以下这个有延迟性 bug
+                                    //         // var idx = tableView.model.index(
+                                    //         //             row, 0)
+                                    //         // if (idx && idx.valid) {
+                                    //         //     var userData = tableView.model.data(
+                                    //         //                 idx, Qt.UserRole)
+                                    //         //     if (userData
+                                    //         //             && typeof userData.isFolder === 'boolean') {
+                                    //         //         // 能够获取到
+                                    //         //         // console.log("从 UserRole 获取 isFolder:",
+                                    //         //         //             userData.isFolder,
+                                    //         //         //             "文件:",
+                                    //         //         //             model.display)
+                                    //         //         return userData.isFolder
+                                    //         //     }
+                                    //         // }
 
-                                                        // 备用方案：尝试直接更新视图模型
-                                                        try {
-                                                            const rowData = tableModel.getRow(row)
-                                                            rowData.name = text
-                                                            tableView.forceLayout()
-                                                            console.log("已更新视图模型，但可能未更新底层数据")
-                                                        } catch (e) {
-                                                            console.error(
-                                                                        "更新视图模型失败:",
-                                                                        e)
-                                                        }
-                                                    }
-                                                }
+                                    //         // 🔥 备用方案：检查文件名是否以 / 结尾
+                                    //         var name = model.display || ""
+                                    //         var isFolder = name.endsWith("/")
+                                    //         // console.log("备用判断 isFolder:",
+                                    //         //             isFolder, "文件:", name)
+                                    //         return isFolder
+                                    //     } catch (e) {
+                                    //         // console.error("判断文件夹类型出错:", e)
+                                    //         // 🔥 出错时也要检查文件名
+                                    //         var name = model.display || ""
+                                    //         return name.endsWith("/")
+                                    //     }
+                                    // }
+                                    // function isFolderType() {
+                                    //     try {
+                                    //         if (tableView.inBucketMode) {
+                                    //             return false
+                                    //         }
 
-                                                // 重置编辑状态
-                                                tableView.editingRow = -1
-                                                tableView.editingColumn = -1
-                                            }
+                                    //         // 🔥 首先检查基本数据是否有效
+                                    //         var fileName = ""
+                                    //         if (model
+                                    //                 && model.display !== undefined) {
+                                    //             fileName = model.display || ""
+                                    //         } else {
+                                    //             // 模型数据无效，返回 false
+                                    //             return false
+                                    //         }
 
-                                            Keys.onEscapePressed: {
-                                                // 取消编辑
-                                                tableView.editingRow = -1
-                                                tableView.editingColumn = -1
-                                            }
+                                    //         // 🔥 如果文件名为空，直接返回 false
+                                    //         if (!fileName || fileName === "") {
+                                    //             return false
+                                    //         }
 
-                                            // 当出现时自动聚焦
-                                            onVisibleChanged: {
-                                                if (visible) {
-                                                    Qt.callLater(function () {
-                                                        forceActiveFocus()
-                                                        selectAll()
-                                                    })
-                                                }
-                                            }
-                                        }
-                                        // 工具提示
-                                        // ToolTip {
-                                        //     id: cellTooltip
-                                        //     visible: mouseArea.containsMouse
-                                        //     delay: 250
-                                        //     timeout: 2500
-                                        //     // 使用绝对位置定位
-                                        //     x: nameCell.mapToItem(tableView, 0,
-                                        //                           0).x
-                                        //     y: nameCell.mapToItem(
-                                        //            tableView, 0,
-                                        //            0).y - cellTooltip.height - 5
-                                        //     text: {
-                                        //         if (instanceBuckets
-                                        //                 && typeof instanceBuckets.getToolTip
-                                        //                 === "function") {
-                                        //             for (var i = 0; i < instanceBuckets.bucketCount(
-                                        //                      ); i++) {
-                                        //                 if (instanceBuckets.getBucketData(
-                                        //                             i,
-                                        //                             0) === display) {
-                                        //                     const tipData = instanceBuckets.getToolTip(i, 0)
-                                        //                     if (tipData) {
-                                        //                         return tipData
-                                        //                     }
-                                        //                 }
-                                        //             }
-                                        //         }
-                                        //         return display
-                                        //     }
+                                    //         // 🔥 尝试从 UserRole 获取准确数据
+                                    //         try {
+                                    //             var idx = tableView.model.index(
+                                    //                         row, 0)
+                                    //             if (idx && idx.valid) {
+                                    //                 var userData = tableView.model.data(
+                                    //                             idx,
+                                    //                             Qt.UserRole)
+                                    //                 if (userData
+                                    //                         && typeof userData.isFolder
+                                    //                         === 'boolean') {
+                                    //                     console.log("✅ 从 UserRole 获取 isFolder:",
+                                    //                                 userData.isFolder,
+                                    //                                 "文件:",
+                                    //                                 fileName)
+                                    //                     return userData.isFolder
+                                    //                 }
+                                    //             }
+                                    //         } catch (userRoleError) {
+                                    //             console.log("⚠️ UserRole 获取失败，使用备用方案:",
+                                    //                         userRoleError)
+                                    //         }
+
+                                    //         // 🔥 备用方案：文件名判断
+                                    //         var isFolder = fileName.endsWith(
+                                    //                     "/")
+                                    //         console.log("🔄 备用判断 isFolder:",
+                                    //                     isFolder, "文件:",
+                                    //                     fileName)
+                                    //         return isFolder
+                                    //     } catch (e) {
+                                    //         console.error("❌ 判断文件夹类型出错:", e)
+                                    //         return false
+                                    //     }
+                                    // }
+
+                                    // 🔥 监听模型数据变化，更新文件夹状态
+                                    // Connections {
+                                    //     target: tableView.model
+                                    //     function onDataChanged() {
+                                    //         cellContainer.isFolder = cellContainer.isFolderType()
+                                    //     }
+                                    // }
+                                    Connections {
+                                        target: tableView.model
+
+                                        // function onDataChanged(topLeft, bottomRight, roles) {
+                                        //     console.log("🔄 模型数据变化，行:", row,
+                                        //                 "重新计算文件夹状态")
+                                        //     // 强制重新计算 isFolder
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
                                         // }
 
-                                        // 处理点击事件
-                                        MouseArea {
-                                            id: mouseArea
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                            propagateComposedEvents: !nameCell.isEditing // 编辑时不传播事件
+                                        // function onModelReset() {
+                                        //     console.log("🔄 模型重置，行:", row,
+                                        //                 "重新计算文件夹状态")
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
 
-                                            onClicked: function (mouse) {
-                                                if (nameCell.isEditing) {
-                                                    mouse.accepted = true
+                                        // function onRowsRemoved(parent, first, last) {
+                                        //     console.log("🔄 行被删除:", first, "到",
+                                        //                 last, "当前行:", row)
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+
+                                        // function onRowsInserted(parent, first, last) {
+                                        //     console.log("🔄 行被插入:", first, "到",
+                                        //                 last, "当前行:", row)
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+                                    }
+                                    // 缓存方案
+                                    property bool isFolder: isFolderType()
+                                    // function getCurrentFolderState() {
+                                    //     return isFolderType()
+                                    // }
+
+                                    // 动态计算全是错误的
+                                    // property bool isFolder: {
+                                    //     // 动态计算
+                                    //     return isFolderType()
+                                    // }
+                                    MouseArea {
+                                        id: cellMouseArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        property bool clickOnButton: false
+
+                                        onPressed: function (mouse) {
+                                            clickOnButton = false
+
+                                            // 检查是否点击在下载按钮区域
+                                            if (column === 3
+                                                    && !tableView.inBucketMode
+                                                    && downloadButton.visible) {
+                                                var buttonRect = Qt.rect(
+                                                            downloadButton.x,
+                                                            downloadButton.y,
+                                                            downloadButton.width,
+                                                            downloadButton.height)
+                                                if (buttonRect.contains(
+                                                            Qt.point(
+                                                                mouse.x,
+                                                                mouse.y))) {
+                                                    clickOnButton = true
+                                                    mouse.accepted = false
                                                     return
                                                 }
-
-                                                const rowData = tableModel.getRow(
-                                                                  row)
-
-                                                if (mouse.button === Qt.LeftButton) {
-                                                    if (mouse.modifiers & Qt.ControlModifier) {
-                                                        // Ctrl+点击: 多选
-                                                        tableView.toggleSelection(
-                                                                    rowData)
-                                                    } else {
-                                                        // 普通点击: 单选
-                                                        tableView.clearSelection()
-                                                        tableView.toggleSelection(
-                                                                    rowData)
-                                                    }
-                                                    mouse.accepted = true
-                                                } else if (mouse.button === Qt.RightButton) {
-                                                    // 右键菜单
-                                                    if (!tableView.isItemSelected(
-                                                                rowData.id)) {
-                                                        tableView.clearSelection()
-                                                        tableView.toggleSelection(
-                                                                    rowData)
-                                                    }
-
-                                                    // 显示上下文菜单
-                                                    contextMenu.rowData = rowData
-                                                    contextMenu.rowIndex = row
-                                                    contextMenu.popup()
-                                                    mouse.accepted = true
-                                                }
                                             }
-                                            onDoubleClicked: function (mouse) {
-                                                const rowData = tableModel.getRow(
-                                                                  row)
 
-                                                if (!rowData.isFolder) {
-                                                    // 对于非文件夹项目，进入编辑状态
-                                                    nameCell.isEditing = true
+                                            mouse.accepted = true
+                                        }
 
-                                                    // 使用 Qt.callLater 确保编辑域获得焦点
-                                                    Qt.callLater(function () {
-                                                        if (editField) {
-                                                            editField.forceActiveFocus()
-                                                            editField.selectAll(
-                                                                        )
-                                                        }
-                                                    })
+                                        onClicked: function (mouse) {
+                                            // 如果点击在按钮上，不处理
+                                            if (clickOnButton) {
+                                                mouse.accepted = false
+                                                return
+                                            }
 
-                                                    mouse.accepted = true
+                                            console.log("点击行:", row,
+                                                        "列:", column)
+
+                                            try {
+                                                if (tableView.inBucketMode) {
+                                                    // 桶模式处理
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        const bucketName = model.display
+                                                        tableView.clearSelection()
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        bucketContextMenu.bucketName = model.display
+                                                        bucketContextMenu.rowIndex = row
+                                                        bucketContextMenu.popup(
+                                                                    )
+                                                    }
                                                 } else {
-                                                    // BUG 双击执行这里
-                                                    // 处理文件夹双击打开
-                                                    console.log("打开文件夹:",
-                                                                rowData.name)
-                                                    // 这里添加打开文件夹的逻辑
-                                                    mouse.accepted = true
+                                                    // 多选
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        const rowData = {
+                                                            "id": "obj" + row,
+                                                            "name": model.display
+                                                                    || ""
+                                                        }
+                                                        var idx = tableView.model.index(
+                                                                    row, 0)
+                                                        if (idx && idx.valid) {
+                                                            var userData = tableView.model.data(
+                                                                        idx,
+                                                                        Qt.UserRole)
+                                                            if (userData) {
+                                                                rowData.key = userData.key
+                                                                        || ""
+                                                                rowData.size = userData.size
+                                                                        || 0
+                                                                rowData.isFolder = userData.isFolder
+                                                                        || false
+                                                                rowData.lastModified
+                                                                        = userData.lastModified
+                                                                        || ""
+                                                            }
+                                                        }
+
+                                                        if (!rowData.key) {
+                                                            rowData.key = rowData.name
+                                                        }
+
+                                                        if (mouse.modifiers & Qt.ControlModifier) {
+                                                            // Ctrl+点击：多选/取消选择
+                                                            if (rowData.isFolder) {
+                                                                                        console.log("文件夹不支持多选，忽略 Ctrl+点击:", rowData.name)
+                                                                return
+                                                            }
+                                                            console.log("Ctrl+点击，切换选择状态:",
+                                                                        rowData.name)
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        } else {
+                                                            // 普通点击：清除其他选择，选择当前项
+                                                            console.log("普通点击，单选:",
+                                                                        rowData.name)
+                                                            tableView.clearSelection()
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        }
+
+                                                        // 更新下载按钮状态
+                                                        downloadTitleButton.enabled
+                                                                = tableView.selectedItems.length > 0
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        // 右键菜单处理
+                                                        const rowData = {
+                                                            "id": "obj" + row,
+                                                            "name": model.display
+                                                                    || ""
+                                                        }
+
+                                                        var idx = tableView.model.index(
+                                                                    row, 0)
+                                                        if (idx && idx.valid) {
+                                                            var userData = tableView.model.data(
+                                                                        idx,
+                                                                        Qt.UserRole)
+                                                            if (userData) {
+                                                                rowData.key = userData.key
+                                                                        || ""
+                                                                rowData.size = userData.size
+                                                                        || 0
+                                                                rowData.isFolder = userData.isFolder
+                                                                        || false
+                                                            }
+                                                        }
+
+                                                        if (!rowData.key) {
+                                                            rowData.key = rowData.name
+                                                        }
+
+                                                        // 如果右键的项目没有被选中，则选中它
+                                                        if (!tableView.isItemSelected(
+                                                                    rowData.id)) {
+                                                            tableView.clearSelection()
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        }
+
+                                                        contextMenu.rowData = rowData
+                                                        contextMenu.rowIndex = row
+                                                        contextMenu.popup()
+                                                    }
                                                 }
+                                            } catch (e) {
+                                                console.error("处理点击事件时出错:", e)
+                                            }
+                                        }
+
+                                        onDoubleClicked: function (mouse) {
+                                            if (clickOnButton) {
+                                                mouse.accepted = false
+                                                return
+                                            }
+
+                                            if (mouse.button !== Qt.LeftButton)
+                                                return
+
+                                            if (tableView.inBucketMode) {
+                                                console.log("打开桶:",
+                                                            model.display)
+                                                currentBucket = model.display
+                                                handleOpenBucket(currentBucket)
+                                            } else {
+                                                handleFolderDoubleClick(row)
                                             }
                                         }
                                     }
-                                }
 
-                                // 其他列 (地区, 日期)
-                                DelegateChoice {
-                                    delegate: Rectangle {
-                                        color: {
-                                            const isSelected = tableView.selectedItems.some(
-                                                                 item => item.id
-                                                                 === tableModel.getRow(
-                                                                     row).id)
-                                            return isSelected ? "#E3F2FD" : (row % 2 === 0 ? "#FFFFFF" : "#F8F9FA")
-                                        }
-                                        implicitHeight: 50
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.margins: 8
 
-                                        Text {
-                                            anchors {
-                                                left: parent.left
-                                                leftMargin: 8
-                                                verticalCenter: parent.verticalCenter
+                                        // 第0列：名称列
+                                        RowLayout {
+                                            visible: column === 0
+                                            anchors.fill: parent
+                                            spacing: 8
+
+                                            // 图标
+                                            Text {
+                                                id: fileIcon
+                                                // 图标获取有问题
+                                                text: {
+                                                    if (tableView.inBucketMode) {
+                                                        return "🪣"
+                                                    } else {
+                                                        var isFolder = false
+                                                        // 调用函数, 才能在 model 数据到来后更新
+                                                        // return cellContainer.isFolderType(
+                                                        //             ) ? "📁" : "📄"
+                                                        return cellContainer.isFolder ? "📁" : "📄"
+                                                        // return getCurrentFolderState(
+                                                        //             ) ? "📁" : "📄"
+                                                    }
+                                                }
+                                                font.pixelSize: 18
+                                                color: {
+                                                    if (tableView.inBucketMode) {
+                                                        return "#1E88E5"
+                                                    } else {
+                                                        var isFolder = text === "📁"
+                                                        return isFolder ? "#2980B9" : "#333333"
+                                                    }
+                                                }
+                                                Layout.preferredWidth: 24
                                             }
+
+                                            // 文本名字没有问题
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: {
+                                                    var name = model.display
+                                                            || "未命名"
+                                                    if (fileIcon.text === "📁"
+                                                            && name.endsWith(
+                                                                '/')) {
+                                                        return name.substring(
+                                                                    0,
+                                                                    name.length - 1)
+                                                    }
+                                                    return name
+                                                }
+                                                elide: Text.ElideRight
+                                                color: fileIcon.text
+                                                       === "📁" ? "#2980B9" : "#333333"
+                                                font.bold: fileIcon.text === "📁"
+                                                font.underline: fileIcon.text === "📁"
+                                                font.pixelSize: 13
+                                            }
+                                        }
+
+                                        // 第1列：大小/区域列
+                                        Text {
+                                            visible: column === 1
+                                            anchors.verticalCenter: parent.verticalCenter
                                             text: display || ""
                                             color: "#555555"
                                             elide: Text.ElideRight
                                             width: parent.width - 16
+                                            font.pixelSize: 13
+                                        }
+
+                                        // 第2列：时间列
+                                        Text {
+                                            visible: column === 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: display || ""
+                                            color: "#555555"
+                                            elide: Text.ElideRight
+                                            width: parent.width - 16
+                                            font.pixelSize: 13
+                                        }
+
+                                        // 第3列：操作列
+                                        Button {
+                                            id: downloadButton
+                                            // visible: {
+                                            //     if (column !== 3
+                                            //             || tableView.inBucketMode) {
+                                            //         return false
+                                            //     }
+                                            //     // 一开始全部都是空, 后面才会运行一次
+                                            //     console.log("🔍 下载按钮可见性判断:",
+                                            //                 JSON.stringify({
+                                            //                                    "row": row,
+                                            //                                    "column": column,
+                                            //                                    "inBucketMode": tableView.inBucketMode,
+                                            //                                    "isFolder": isFolder,
+                                            //                                    "fileName": model.display || ""
+                                            //                                    // "shouldShow": shouldShow
+                                            //                                }))
+
+                                            //     if (isFolder) {
+                                            //         return false
+                                            //     } else {
+                                            //         return true
+                                            //     }
+                                            //     // 为什么最后 shouldShow 是 true ? name 空的
+                                            //     // return shouldShow
+                                            // }
+                                            visible: {
+                                                if (column !== 3
+                                                        || tableView.inBucketMode) {
+                                                    return false
+                                                }
+
+                                                // 🔥 直接调用函数，不依赖缓存属性
+                                                var isCurrentlyFolder = cellContainer.isFolderType()
+                                                var fileName = model.display
+                                                        || ""
+
+                                                // 🔥 添加文件名有效性检查
+                                                if (!fileName
+                                                        || fileName === "") {
+                                                    return false
+                                                }
+
+                                                // console.log("🔍 下载按钮可见性判断:",
+                                                //             JSON.stringify({
+                                                //                                "row": row,
+                                                //                                "column": column,
+                                                //                                "inBucketMode": tableView.inBucketMode,
+                                                //                                "isFolder": isCurrentlyFolder,
+                                                //                                "fileName": fileName,
+                                                //                                "shouldShow": !isCurrentlyFolder
+                                                //                            }))
+
+                                                return !isCurrentlyFolder
+                                            }
+                                            // anchors.centerIn: parent
+                                            anchors.fill: parent
+                                            //  anchors.margins: 4
+                                            // width: 70
+                                            // height: 40
+                                            z: 10
+                                            //                                         background: Rectangle {
+                                            //     anchors.fill: parent
+                                            //     radius: 6
+
+                                            //     // 🔥 简化：使用纯色背景
+                                            //     color: {
+                                            //         if (parent.pressed) {
+                                            //             return "#1976D2"  // 按下时的深蓝色
+                                            //         } else if (parent.hovered) {
+                                            //             return "#2196F3"  // 悬停时的蓝色
+                                            //         } else {
+                                            //             return "#E3F2FD"  // 默认的浅蓝色
+                                            //         }
+                                            //     }
+
+                                            //     border.color: parent.hovered ? "#1976D2" : "#90CAF9"
+                                            //     border.width: 1
+
+                                            //     // 🔥 添加动画效果
+                                            //     Behavior on color {
+                                            //         ColorAnimation {
+                                            //             duration: 150
+                                            //             easing.type: Easing.OutQuad
+                                            //         }
+                                            //     }
+                                            // }
+                                            background: Rectangle {
+                                                anchors.fill: parent
+                                                radius: 8
+
+                                                // 🔥 Material 颜色方案
+                                                color: {
+                                                    if (parent.pressed) {
+                                                        return "#1E88E5"
+                                                    } else if (parent.hovered) {
+                                                        return "#42A5F5"
+                                                    } else {
+                                                        return "#E3F2FD"
+                                                    }
+                                                }
+
+                                                // 🔥 Material 阴影
+                                                layer.enabled: true
+                                                layer.effect: DropShadow {
+                                                    horizontalOffset: 0
+                                                    verticalOffset: parent.parent.hovered ? 4 : 2
+                                                    radius: parent.parent.hovered ? 8 : 4
+                                                    samples: 16
+                                                    color: "#40000000"
+
+                                                    Behavior on verticalOffset {
+                                                        NumberAnimation {
+                                                            duration: 200
+                                                        }
+                                                    }
+                                                    Behavior on radius {
+                                                        NumberAnimation {
+                                                            duration: 200
+                                                        }
+                                                    }
+                                                }
+
+                                                // 🔥 添加涟漪效果
+                                                Rectangle {
+                                                    id: ripple
+                                                    anchors.centerIn: parent
+                                                    width: 0
+                                                    height: 0
+                                                    radius: width / 2
+                                                    color: "#FFFFFF"
+                                                    opacity: 0
+
+                                                    PropertyAnimation {
+                                                        // id: rippleAnimation
+                                                        target: ripple
+                                                        properties: "width,height"
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+
+                                                    PropertyAnimation {
+                                                        // id: rippleOpacity
+                                                        target: ripple
+                                                        property: "opacity"
+                                                        from: 0.3
+                                                        to: 0
+                                                        duration: 300
+                                                    }
+                                                }
+
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: 200
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                            }
+
+                                            // contentItem: RowLayout {
+                                            //     anchors.centerIn: parent
+                                            //     spacing: 6
+
+                                            //     Text {
+                                            //         text: "⬇"
+                                            //         font.pixelSize: 14
+                                            //         color: "#1565C0" // 🔥 使用更深的蓝色
+                                            //     }
+
+                                            //     Text {
+                                            //         text: "下载"
+                                            //         font.pixelSize: 12
+                                            //         color: "#1565C0" // 🔥 使用更深的蓝色
+                                            //     }
+                                            // }
+                                                contentItem: Item {
+        anchors.fill: parent
+        
+        // 🔥 使用 Row 替代 RowLayout，更容易控制居中
+        Row {
+            anchors.centerIn: parent  // 🔥 关键修复：确保整个 Row 在父容器中居中
+            spacing: 6
+            
+            Text {
+                text: "⬇"
+                font.pixelSize: 16
+                color: "#1565C0"
+                anchors.verticalCenter: parent.verticalCenter  // 🔥 确保文本垂直居中
+            }
+
+            Text {
+                text: "下载"
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: "#1565C0"
+                anchors.verticalCenter: parent.verticalCenter  // 🔥 确保文本垂直居中
+            }
+        }
+    }
+
+                                            onClicked: {
+                                                console.log("🔥 下载按钮被点击!")
+                                                if (cellContainer.isFolder) {
+                                                    console.warn("⚠️ 尝试下载文件夹，操作被阻止")
+                                                    return
+                                                }
+                                                try {
+                                                    if (!tableView.model) {
+                                                        console.error("表格模型无效")
+                                                        return
+                                                    }
+
+                                                    var fileInfo = {
+                                                        "id": "obj" + row,
+                                                        "name": model.display
+                                                                || "未知文件"
+                                                    }
+
+                                                    var idx = tableView.model.index(
+                                                                row, 0)
+                                                    if (idx && idx.valid) {
+                                                        var userData = tableView.model.data(
+                                                                    idx,
+                                                                    Qt.UserRole)
+                                                        if (userData) {
+                                                            fileInfo.key = userData.key
+                                                                    || ""
+                                                            fileInfo.size = userData.size
+                                                                    || 0
+                                                            fileInfo.isFolder = userData.isFolder
+                                                                    || false
+                                                        }
+                                                    }
+
+                                                    if (!fileInfo.key) {
+                                                        fileInfo.key = fileInfo.name
+                                                    }
+
+                                                    console.log("下载文件:",
+                                                                fileInfo)
+                                                    rootItem.addDownloadTask(
+                                                                fileInfo)
+                                                } catch (e) {
+                                                    console.error("下载处理错误:", e)
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            // 选择处理函数
-                            function toggleSelection(item) {
-                                const index = selectedItems.findIndex(
-                                                i => i.id === item.id)
+                                function toggleSelection(item) {
+                                    const index = selectedItems.findIndex(
+                                                    i => i.id === item.id)
+                                    if (index >= 0) {
+                                        // 已选中，取消选择
+                                        selectedItems.splice(index, 1)
+                                    } else {
+                                        // 未选中，添加选择
+                                        selectedItems.push(item)
+                                    }
+                                    // 通知视图更新
+                                    selectedItemsChanged()
 
-                                if (index >= 0) {
-                                    // 已选中，取消选择
-                                    selectedItems.splice(index, 1)
-                                } else {
-                                    // 未选中，添加选择
-                                    selectedItems.push(item)
+                                    // 更新下载按钮状态
+                                    downloadTitleButton.enabled = selectedItems.length > 0
                                 }
+                                // function toggleSelection(item) {
+                                //     console.log("切换选择状态:", item.name,
+                                //                 "ID:", item.id)
 
-                                // 通知视图更新
-                                selectedItemsChanged()
-
-                                // 更新下载按钮状态
-                                downloadButton.enabled = selectedItems.length > 0
-                            }
-
-                            function clearSelection() {
-                                selectedItems = []
-                                selectedItemsChanged()
-                                downloadButton.enabled = false
-                            }
-
-                            function isItemSelected(id) {
-                                // 只有成功选择
-                                console.log("isItemSelected called with id:",
-                                            id)
-                                return selectedItems.some(
-                                            item => item.id === id)
-                            }
-                            // 上下文菜单
-                            TtMenu {
-                                id: contextMenu
-                                property var rowData: null
-                                property int rowIndex: -1
-
-                                // MenuItem {
-                                //     text: qsTr("编辑")
-                                //     onTriggered: {
-                                //         try {
-                                //             // 直接使用行索引，而不是试图转换它
-                                //             const row = contextMenu.rowIndex
-                                //             const column = 1 // 名称列
-                                //             // 获取单元格项
-                                //             const nameDelegate = tableView.itemAtCell(
-                                //                                    column, row)
-                                //             if (nameDelegate) {
-                                //                 // 查找实际的 Rectangle （nameCell）
-                                //                 for (var i = 0; i
-                                //                      < nameDelegate.children.length; i++) {
-                                //                     const child = nameDelegate.children[i]
-                                //                     if (child.isEditing !== undefined) {
-                                //                         // 找到了 nameCell
-                                //                         child.isEditing = true
-                                //                         console.log("开始编辑:",
-                                //                                     child.display)
-
-                                //                         // 寻找编辑框并聚焦
-                                //                         Qt.callLater(function () {
-                                //                             for (var j = 0; j
-                                //                                  < child.children.length; j++) {
-                                //                                 const grandChild = child.children[j]
-                                //                                 if (grandChild.text !== undefined
-                                //                                         && typeof grandChild.forceActiveFocus === "function" && typeof grandChild.selectAll === "function") {
-                                //                                     // 找到了编辑框
-                                //                                     grandChild.forceActiveFocus()
-                                //                                     grandChild.selectAll()
-                                //                                     break
-                                //                                 }
-                                //                             }
-                                //                         })
-
-                                //                         break
-                                //                     }
-                                //                 }
-                                //             }
-                                //         } catch (e) {
-                                //             console.error("编辑操作失败:", e)
-                                //         }
+                                //     const index = selectedItems.findIndex(
+                                //                     i => i.id === item.id)
+                                //     if (index >= 0) {
+                                //         // 已选中，取消选择
+                                //         selectedItems.splice(index, 1)
+                                //         console.log("取消选择:", item.name)
+                                //     } else {
+                                //         // 未选中，添加选择
+                                //         selectedItems.push(item)
+                                //         console.log("添加选择:", item.name)
                                 //     }
+
+                                //     // 🔥 手动触发更新
+                                //     selectedItemsChanged()
+
+                                //     // 🔥 更新下载按钮状态
+                                //     downloadTitleButton.enabled = selectedItems.length > 0
+
+                                //     console.log("当前选择项目数:",
+                                //                 selectedItems.length)
                                 // }
-                                MenuItem {
-                                    text: qsTr("编辑")
-                                    onTriggered: {
-                                        // 使用全局属性控制编辑状态，避免 DOM 访问
-                                        tableView.editingRow = contextMenu.rowIndex
-                                        tableView.editingColumn = 1 // 名称列
+                                function getDownloadableItems() {
+                                    return selectedItems.filter(
+                                                item => !item.isFolder)
+                                }
 
-                                        // 通知视图更新
-                                        tableView.forceLayout()
+                                function clearSelection() {
+                                    selectedItems = []
+                                    selectedItemsChanged()
+                                    downloadTitleButton.enabled = false
+                                }
 
-                                        console.log("开始编辑行:",
-                                                    contextMenu.rowIndex)
+                                function isItemSelected(id) {
+                                    // 只有成功选择
+                                    console.log("isItemSelected called with id:",
+                                                id)
+                                    return selectedItems.some(
+                                                item => item.id === id)
+                                }
+                                // 上下文菜单
+                                TtMenu {
+                                    id: contextMenu
+                                    property var rowData: null
+                                    property int rowIndex: -1
+                                    // MenuItem {
+                                    //     text: qsTr("编辑")
+                                    //     onTriggered: {
+                                    //         // 使用全局属性控制编辑状态，避免 DOM 访问
+                                    //         tableView.editingRow = contextMenu.rowIndex
+                                    //         tableView.editingColumn = 1 // 名称列
+
+                                    //         // 通知视图更新
+                                    //         tableView.forceLayout()
+
+                                    //         console.log("开始编辑行:",
+                                    //                     contextMenu.rowIndex)
+                                    //     }
+                                    // }
+                                    MenuItem {
+                                        text: qsTr("删除对象")
+                                        onTriggered: {
+                                            console.log("删除项目:",
+                                                        contextMenu.rowData ? contextMenu.rowData.name : "未知",
+                                                        "桶名", currentBucket,
+                                                        "路径",
+                                                        contextMenu.rowData.key)
+                                            ManagerGlobal.deleteFile(
+                                                        currentBucket,
+                                                        contextMenu.rowData.key)
+                                        }
                                     }
                                 }
-                                MenuItem {
-                                    text: qsTr("删除")
-                                    onTriggered: {
-                                        console.log("删除项目:",
-                                                    contextMenu.rowData ? contextMenu.rowData.name : "未知")
-                                        // 实现删除逻辑
-                                    }
-                                }
-                            }
-                            // 确保在文件夹选择变化时刷新表格
-                            Component.onCompleted: {
-                                folderListView.currentIndexChanged.connect(
-                                            function () {
-                                                refreshData()
+                                Connections {
+                                    target: contentPanel
+
+                                    function onWidthChanged() {
+                                        // 更新列宽计算
+                                        // const availableWidth = contentPanel.width - 32
+                                        const scrollBarWidth = 0
+                                        const availableWidth = contentPanel.width - scrollBarWidth
+                                        if (availableWidth > 500) {
+                                            if (tableView.inBucketMode) {
+                                                // 桶模型列宽
+                                                rootItem.columnWidths
+                                                        = [Math.max(
+                                                               200,
+                                                               availableWidth * 0.60), // 桶名称列占60%
+                                                           Math.max(
+                                                               150,
+                                                               availableWidth * 0.20), // 创建时间列占20%
+                                                           Math.max(
+                                                               150,
+                                                               availableWidth * 0.20) // 区域列占20%
+                                                        ]
+                                            } else {
+                                                rootItem.columnWidths
+                                                        = [Math.max(
+                                                               200,
+                                                               availableWidth * 0.45), // 名称列占45%
+                                                           Math.max(
+                                                               150,
+                                                               availableWidth * 0.20), // 大小列占20%
+                                                           Math.max(
+                                                               150,
+                                                               availableWidth * 0.20), // 更新时间列占20%
+                                                           Math.max(
+                                                               100,
+                                                               availableWidth * 0.15) // 操作列占15%
+                                                        ]
+                                            }
+                                            // 强制更新布局
+                                            Qt.callLater(function () {
+                                                tableView.forceLayout()
                                             })
-
-                                // 初始加载数据
-                                refreshData()
-                            }
-
-                            // 监听实例存储桶变化
-                            Connections {
-                                target: instanceBuckets
-                                function onModelChanged() {
-                                    tableView.refreshData()
-                                }
-                            }
-                            // 4. 添加响应窗口尺寸变化的逻辑
-                            Connections {
-                                target: contentPanel
-
-                                function onWidthChanged() {
-                                    // 更新列宽计算
-                                    const availableWidth = contentPanel.width - 32
-                                    if (availableWidth > 500) {
-                                        rootItem.columnWidths = [30, // 图标列固定宽度
-                                                                 Math.max(
-                                                                     200,
-                                                                     availableWidth
-                                                                     * 0.45), // 名称列占比45%
-                                                                 Math.max(
-                                                                     100,
-                                                                     availableWidth
-                                                                     * 0.25), // 地区列占比25%
-                                                                 Math.max(
-                                                                     100,
-                                                                     availableWidth
-                                                                     * 0.30) // 日期列占比30%
-                                                ]
-                                        // console.log("Updated column widths:",
-                                        // rootItem.columnWidths)
-                                        tableView.forceLayout()
+                                        }
                                     }
                                 }
+                                // 确保在文件夹选择变化时刷新表格
+                                Component.onCompleted: {
+                                    ManagerGlobal.refreshBuckets()
+                                    // bucketListView.currentIndexChanged.connect(
+                                    //             function () {
+                                    //                 // refreshData()
+                                    //             })
+                                }
+                            }
+                        }
+                        // 在表格或列表视图下方
+                        // TtPaginationNav {
+                        //     id: pagination
+                        //     Layout.fillWidth: true
+                        //     Layout.alignment: Qt.AlignBottom
+                        //     // 选择某个桶的时候，计算总条数, 切换桶的时候对应的总条数也要改变
+                        //     totalRecords: {
+                        //         if (tableView.model
+                        //                 && typeof tableView.model.rowCount === "function") {
+                        //             // 打印大只有一次, 后面变化了, 不会输出 log, 但会底部改变 totalRecord ??? 为什么
+                        //             console.log("get total ",
+                        //                         tableView.model.rowCount())
+                        //             return tableView.model.rowCount()
+                        //         }
+                        //         console.log("return 0")
+                        //         return 0
+                        //     }
+                        //     rowsPerPage: 20
+                        //     currentPage: rootItem.currentPage
+
+                        //     onPageRequested: function (page) {
+                        //         // console.log("切换到页码:", page)
+                        //         // 更新当前页码
+                        //         rootItem.currentPage = page
+                        //         // 重新计算分页范围
+                        //         rootItem.pageStartRow = (page - 1) * currentPerPage
+                        //         rootItem.pageEndRow = Math.min(
+                        //                     rootItem.pageStartRow + currentPerPage,
+                        //                     currentRecordCount) - 1
+                        //         Qt.callLater(function () {
+                        //             tableView.contentY = 0
+                        //             tableView.forceLayout()
+                        //             tableView.contentY = 0
+                        //         })
+                        //     }
+                        //     // 处理每页行数变化
+                        //     onRowsPerPageRequested: function (rows) {
+                        //         console.log("每页显示行数改为:", rows)
+                        //         // 更新每页行数
+                        //         rootItem.currentPerPage = rows
+
+                        //         // 如果当前页超出新的页数范围，调整到第一页
+                        //         const totalPages = Math.ceil(
+                        //                              currentRecordCount / rows)
+                        //         if (currentPage > totalPages) {
+                        //             currentPage = 1
+                        //         }
+
+                        //         // 重新计算分页范围
+                        //         rootItem.pageStartRow = (currentPage - 1) * rows
+                        //         rootItem.pageEndRow = Math.min(
+                        //                     rootItem.pageStartRow + rows,
+                        //                     currentRecordCount) - 1
+
+                        //         // 强制刷新表格
+                        //         tableView.forceLayout()
+
+                        //         // 滚动到顶部
+                        //         tableView.contentY = 0
+                        //     }
+                        // }
+                        TtPaginationNav {
+                            id: pagination
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignBottom
+
+                            // 🔥 修复：使用计算属性确保数据正确
+                            totalRecords: {
+                                if (!tableView.model) {
+                                    return 0
+                                }
+
+                                try {
+                                    if (typeof tableView.model.rowCount === "function") {
+                                        var count = tableView.model.rowCount()
+                                        console.log("📊 分页组件获取总记录数:",
+                                                    count, "当前模式:",
+                                                    tableView.inBucketMode ? "桶模式" : "对象模式")
+                                        return count
+                                    }
+                                } catch (e) {
+                                    console.error("❌ 获取总记录数失败:", e)
+                                }
+                                return 0
+                            }
+
+                            rowsPerPage: rootItem.currentPerPage || 20
+
+                            // 🔥 关键修复：确保双向绑定
+                            currentPage: rootItem.currentPage
+
+                            // 🔥 修复页面切换处理
+                            onPageRequested: function (page) {
+                                console.log("🔄 分页组件请求切换到页码:", page, "当前页:",
+                                            rootItem.currentPage)
+
+                                // 🔥 验证页码有效性
+                                var maxPage = Math.ceil(
+                                            totalRecords / rowsPerPage)
+                                if (page < 1 || page > maxPage) {
+                                    console.warn("⚠️ 无效的页码:", page,
+                                                 "最大页数:", maxPage)
+                                    return
+                                }
+
+                                // 🔥 立即更新当前页码
+                                rootItem.currentPage = page
+
+                                // 🔥 重新计算分页范围
+                                var newStartRow = (page - 1) * rowsPerPage
+                                var newEndRow = Math.min(
+                                            newStartRow + rowsPerPage,
+                                            totalRecords) - 1
+
+                                console.log("📄 计算新的分页范围:", newStartRow, "到",
+                                            newEndRow)
+
+                                rootItem.pageStartRow = newStartRow
+                                rootItem.pageEndRow = newEndRow
+
+                                // 🔥 立即刷新表格
+                                Qt.callLater(function () {
+                                    console.log("🔄 强制刷新表格布局")
+                                    tableView.contentY = 0
+                                    tableView.forceLayout()
+
+                                    // 🔥 确保分页组件状态同步
+                                    pagination.currentPage = page
+                                })
+                            }
+
+                            // 🔥 修复每页行数变化处理
+                            onRowsPerPageRequested: function (rows) {
+                                console.log("📝 每页显示行数改为:", rows, "当前页:",
+                                            rootItem.currentPage)
+
+                                // 🔥 更新每页行数
+                                rootItem.currentPerPage = rows
+
+                                // 🔥 重新计算最大页数
+                                var maxPage = Math.ceil(totalRecords / rows)
+                                console.log("📊 新的最大页数:", maxPage)
+
+                                // 🔥 如果当前页超出范围，调整到第一页
+                                if (rootItem.currentPage > maxPage) {
+                                    console.log("⚠️ 当前页超出范围，重置到第1页")
+                                    rootItem.currentPage = 1
+                                }
+
+                                // 🔥 重新计算分页范围
+                                var newStartRow = (rootItem.currentPage - 1) * rows
+                                var newEndRow = Math.min(newStartRow + rows,
+                                                         totalRecords) - 1
+
+                                rootItem.pageStartRow = newStartRow
+                                rootItem.pageEndRow = newEndRow
+
+                                // 🔥 强制刷新表格
+                                Qt.callLater(function () {
+                                    tableView.forceLayout()
+                                    tableView.contentY = 0
+
+                                    // 🔥 确保分页组件状态同步
+                                    pagination.currentPage = rootItem.currentPage
+                                })
                             }
                         }
                     }
@@ -1506,14 +4695,15 @@ Item {
 
                 Label {
                     text: {
+                        rootItem.getCurrentPageRowCount()
                         // 修复错误的模型引用
-                        const count = tableModel ? tableModel.rowCount : 0
-                        const selected = tableView.selectedItems.length
-                        return selected
-                                > 0 ? `已选择 ${selected} 个项目，共 ${count} 个项目` : `共 ${count} 个项目`
+                        // const count = tableModel ? tableModel.rowCount : 0
+                        // const selected = tableView.selectedItems.length
+                        // return selected
+                        //         > 0 ? `已选择 ${selected} 个项目，共 ${count} 个项目` : `共 ${count} 个项目`
                     }
-                    font.pixelSize: 12
-                    color: "#666666"
+                    // font.pixelSize: 12
+                    // color: "#666666"
                 }
 
                 Item {
@@ -1526,6 +4716,538 @@ Item {
                     color: "#666666"
                 }
             }
+        }
+    }
+
+    // 添加下载管理面板
+    // DownloadPanel {
+    //     id: downloadPanel
+    //     parent: Overlay.overlay
+    //     // 关键修改：传递模型给 DownloadPanel
+    //     downloadModel: rootItem.downloadModel
+    //     visible: downloadModel.count > 0
+    //     activeDownloads: {
+    //         let count = 0
+    //         for (var i = 0; i < downloadModel.count; i++) {
+    //             // if (downloadModel.get(i).progress < 1)
+    //             //     count++
+    //             const item = downloadModel.get(i)
+    //             if (item && item.progress < 1 && item.status !== "错误") {
+    //                 count++
+    //             }
+    //         }
+    //         return count
+    //     }
+    // }
+    Component.onCompleted: {
+        const availableWidth = contentPanel.width
+        if (tableView.inBucketMode) {
+            // 桶模型列宽
+            rootItem.columnWidths = [Math.max(
+                                         200,
+                                         availableWidth * 0.60), // 桶名称列占60%
+                                     Math.max(
+                                         150,
+                                         availableWidth * 0.20), // 创建时间列占20%
+                                     Math.max(150,
+                                              availableWidth * 0.20) // 区域列占20%
+                    ]
+        } else {
+            // 对象模型列宽
+            rootItem.columnWidths = [Math.max(200,
+                                              availableWidth * 0.50), // 名称列占50%
+                                     Math.max(150,
+                                              availableWidth * 0.25), // 大小列占25%
+                                     Math.max(
+                                         150,
+                                         availableWidth * 0.20) // 更新时间列占25%
+                    ]
+        }
+        // 强制更新布局
+        Qt.callLater(function () {
+            tableView.forceLayout()
+        })
+
+        // 还没有登录, 就已经进入分页状态的
+        // 初始化完成后立即更新分页状态
+        // updatePaginationState()
+
+        // 设置一个延迟更新，确保在模型数据加载后更新分页状态
+        Qt.callLater(function () {
+            rootItem.currentRecordCount = updateRecordCount()
+            updatePaginationState()
+        })
+        // 连接下载进度信号
+        ManagerGlobal.downloadProgressUpdated.connect(
+                    function (jobId, progress) {
+                        // 这里没有执行?
+                        // 缺少某些任务
+                        // 1.0 的进度是完成任务
+                        console.log("TEST 更新下载进度:", jobId, progress)
+                        // 确保参数有效
+                        if (!jobId || progress === undefined
+                                || progress === null) {
+                            console.warn("下载进度更新参数无效:", jobId, progress)
+                            return
+                        }
+                        let found = false
+                        // 查找对应的下载项并更新进度
+                        for (var i = 0; i < downloadModel.count; i++) {
+                            const item = downloadModel.get(i)
+                            if (item && item.jobId === jobId) {
+                                found = true
+                                // 更新进度
+                                downloadModel.setProperty(i,
+                                                          "progress", progress)
+                                downloadModel.setProperty(i, "lastUpdateTime",
+                                                          new Date().getTime())
+                                if (progress >= 1.0) {
+                                    // 添加到历史模型中
+                                    downloadModel.setProperty(i,
+                                                              "status", "已完成")
+                                    downloadModel.setProperty(i, "speed", "")
+                                    // 文本更新放到 downloadwindow 中
+                                    // 缺少 localPath
+                                    console.log("下载完成并添加到历史模型中:", item.name,
+                                                "本地路径:", item.localPath)
+                                    // 添加的 name 也是没有问题的
+                                    downloadHistoryModel.append({
+                                                                    "name": item.name,
+                                                                    "size": item.size,
+                                                                    "progress": item.progress,
+                                                                    "jobId": item.jobId,
+                                                                    "status": "已完成",
+                                                                    "speed": item.speed
+                                                                             || "0 KB/s",
+                                                                    "startTime": item.startTime,
+                                                                    "lastUpdateTime": item.lastUpdateTime,
+                                                                    "completedTime": new Date().getTime(),
+                                                                    "bucketName": item.bucketName,
+                                                                    "key": item.key,
+                                                                    "localPath": item.localPath
+                                                                })
+                                    downloadModel.remove(i)
+                                } else if (progress > 0) {
+                                    downloadModel.setProperty(i,
+                                                              "status", "下载中")
+                                    // 计算下载速度（简化版）
+                                    const currentTime = new Date().getTime()
+                                    const startTime = item.startTime
+                                                    || currentTime
+                                    const elapsedSeconds = (currentTime - startTime) / 1000
+                                    if (elapsedSeconds > 0) {
+                                        const speed = Math.round(
+                                                        (progress * 1024)
+                                                        / elapsedSeconds) // 简化速度计算
+                                        downloadModel.setProperty(
+                                                    i, "speed", `${speed} KB/s`)
+                                    }
+                                } else {
+                                    downloadModel.setProperty(i,
+                                                              "status", "连接中")
+                                    downloadModel.setProperty(i,
+                                                              "speed", "0 KB/s")
+                                }
+                                break
+                            }
+                        }
+                        if (!found) {
+                            console.warn("找不到下载任务:", jobId)
+                        }
+                    })
+        ManagerGlobal.bucketListLoaded.connect(function () {
+            // 如何至链接一次 ???
+            console.log("桶列表加载完成")
+            // 重复触发
+            if (rootItem) {
+                console.log("初始化根项, 并发射信号")
+                rootItem.initializationCompleted()
+            }
+        })
+
+        // 添加下载错误处理
+        if (typeof ManagerGlobal.downloadError !== 'undefined') {
+            ManagerGlobal.downloadError.connect(function (jobId, errorMessage) {
+                console.error("下载错误:", jobId, errorMessage)
+                // 查找对应的下载项并标记错误
+                for (var i = 0; i < downloadModel.count; i++) {
+                    const item = downloadModel.get(i)
+                    if (item && item.jobId === jobId) {
+                        downloadModel.setProperty(i, "status", "错误")
+                        downloadModel.setProperty(i, "speed", "")
+                        break
+                    }
+                }
+            })
+        }
+        console.log("组件构造完成")
+        searchField.historyModel = ManagerGlobal.getBucketNames()
+        console.log("SearchField HistoryModel: ", searchField.historyModel)
+
+        ManagerGlobal.uploadProgressUpdated.connect(function (jobId, progress) {
+            console.log("更新下载进度", jobId, progress)
+            if (!jobId || progress === undefined || progress === null) {
+                console.warn("下载进度更新参数无效:", jobId, progress)
+                return
+            }
+            let found = false
+            for (var i = 0; i < uploadModel.count; ++i) {
+                const item = uploadModel.get(i)
+                if (item && item.jobId === jobId) {
+                    found = true
+                    uploadModel.setProperty(i, "progress", progress)
+                    uploadModel.setProperty(i, "lastUpdateTime",
+                                            new Date().getTime())
+                    if (progress >= 1.0) {
+                        console.log("上传完成并添加到历史模型中:", item.fileName)
+                        uploadModel.setProperty(i, "status", "已完成")
+                        uploadModel.setProperty(i, "speed", 0)
+                        uploadHistoryModel.append({
+                                                      "jobId": item.jobId,
+                                                      "fileName": item.fileName,
+                                                      "progress": item.progress,
+                                                      "status": "已完成",
+                                                      "bucket": item.bucket,
+                                                      "remotePath": item.remotePath
+                                                                    || "",
+                                                      "size": item.size || 0,
+                                                      "completedTime": new Date().getTime()
+                                                  })
+
+                        // 没有刷新
+                        refreshCurrentObjectsImmediately(item.bucket,
+                                                         item.remotePath)
+                        showSuccessMessage(`文件 ${item.fileName} 上传完成`,
+                                           "上传成功", 3000)
+                    }
+                }
+            }
+        })
+
+        ManagerGlobal.deleteObjectSuccess.connect(function (bucket, key) {
+            console.log("删除对象成功: ", bucket, key)
+
+            tableView.clearSelection()
+
+            var directoryPath = ""
+            var lastSlashIndex = key.lastIndexOf("/")
+
+            if (lastSlashIndex !== -1) {
+                directoryPath = key.substring(0, lastSlashIndex + 1)
+                console.log("提取的目录路径:", directoryPath) // 输出: "测试文件/"
+            }
+
+            // 刷新当前目录
+            if (directoryPath) {
+                // 会刷新多次
+                console.log("刷新1")
+                ManagerGlobal.refreshObjects(bucket, directoryPath)
+            } else {
+                console.log("刷新2")
+                ManagerGlobal.refreshObjects(bucket)
+            }
+            resetPaginationOnFolderChange()
+        })
+        // 一开始就初始化文件历史记录
+        initializeHistoryModels()
+    }
+
+    function refreshCurrentObjectsImmediately(bucketName, remotePath) {
+        // 正确
+        console.log("立即刷新当前对象列表:", bucketName, "路径:", remotePath)
+        if (!bucketName || bucketName !== rootItem.currentBucket) {
+            console.log("📝 上传的桶与当前查看的桶不同，跳过刷新")
+            return
+        }
+
+        // 获取当前面包屑路径, 没有桶名, 没有 /
+        var currentPath = breadcrumbNav.getCurrentPath()
+        // remotePath 与 currentPath 相等
+        console.log("当前查看的路径:", currentPath)
+        var refreshPath = remotePath
+
+        console.log("🔄 上传完成，立即刷新对象列表:", bucketName, "路径:", refreshPath)
+
+        // 清楚, 但是没有 tableview 加载
+        tableView.clearSelection()
+        // 刷新对象列表
+        if (refreshPath && refreshPath !== bucketName) {
+            console.log("11111111111111111111刷新指定路径:", refreshPath)
+            ManagerGlobal.refreshObjects(bucketName, refreshPath)
+        } else {
+            // 在根目录下 自动创建一个文件
+            // 输出的是这里
+            console.log("----------------------------------")
+            ManagerGlobal.refreshObjects(bucketName)
+        }
+
+        // 重置分页状态
+        resetPaginationOnFolderChange()
+    }
+
+    // 在 MainPage.qml 中的下载完成处理函数中添加
+    // 根本没有调用
+    function handleDownloadCompleted(jobId) {
+        // 查找对应的下载任务
+        for (var i = 0; i < downloadModel.count; i++) {
+            var item = downloadModel.get(i)
+            if (item.jobId === jobId) {
+                // 第一个是 undefined
+                console.log("下载完成:", item.name, item.jobId)
+                // 保存到历史记录
+                if (ManagerGlobal && ManagerGlobal.getHistoryManager) {
+                    // 获取对象 obj
+                    var historyManager = ManagerGlobal.getHistoryManager()
+                    // 插入语句
+                    if (historyManager) {
+                        var record = {
+                            "jobId": item.jobId,
+                            "fileName": item.name,
+                            "fileSize": item.fileSize || 0,
+                            "bucketName": item.bucketName,
+                            "objectKey": item.key,
+                            "localPath": item.localPath,
+                            "status": "已完成",
+                            "startTime"// "startTime": item.startTime || Date.now(),
+                            : item.startTime,
+                            "completedTime": Date.now()
+                        }
+
+                        try {
+                            historyManager.addDownloadRecord(record)
+                            // 但是这里成功了 ???
+                            console.log("下载历史保存成功:", item.name)
+                        } catch (error) {
+                            console.error("保存下载历史失败:", error)
+                        }
+                    }
+                }
+                break
+            }
+        }
+    }
+    function handleFolderDoubleClick(row) {
+        try {
+            console.log("📁 处理文件夹双击，行:", row)
+
+            // 🔥 防止加载期间操作
+            if (loadingOverlay.active) {
+                console.log("⚠️ 正在加载中，忽略操作")
+                return
+            }
+
+            var rowData = {
+                "id": "obj" + row,
+                "name": ""
+            }
+
+            // 🔥 安全获取行数据
+            var currentObjectModel = tableView.model
+            if (!currentObjectModel) {
+                console.error("❌ 表格模型无效")
+                return
+            }
+
+            var indexCol0 = currentObjectModel.index(row, 0)
+            if (!indexCol0 || !indexCol0.valid) {
+                console.error("❌ 无法获取有效索引，行:", row)
+                return
+            }
+
+            // 🔥 获取显示名称
+            rowData.name = currentObjectModel.data(indexCol0,
+                                                   Qt.DisplayRole) || ""
+            if (!rowData.name) {
+                console.error("❌ 无法获取文件名")
+                return
+            }
+
+            // 🔥 获取详细数据
+            var userRoleDataMap = currentObjectModel.data(indexCol0,
+                                                          Qt.UserRole)
+            if (userRoleDataMap) {
+                rowData.isFolder = userRoleDataMap.isFolder
+                rowData.key = userRoleDataMap.key
+                rowData.size = userRoleDataMap.size
+                rowData.date = userRoleDataMap.lastModified
+            } else {
+                console.warn("⚠️ UserRole 数据缺失，使用备用方案")
+                rowData.isFolder = rowData.name.endsWith('/')
+                rowData.key = rowData.name
+            }
+
+            // 🔥 验证是否为文件夹
+            if (!rowData.isFolder) {
+                console.log("❌ 不是文件夹，忽略操作")
+                return
+            }
+
+            // 🔥 显示加载状态
+            const displayName = rowData.name.endsWith(
+                                  '/') ? rowData.name.substring(
+                                             0,
+                                             rowData.name.length - 1) : rowData.name
+            loadingOverlay.show("objects", `正在加载文件夹 ${displayName}...`)
+
+            // 🔥 构建导航路径
+            const keyToNavigate = rowData.key
+                                || (rowData.name.endsWith(
+                                        '/') ? rowData.name : rowData.name + '/')
+
+            console.log("📁 打开文件夹:", displayName, "路径:", keyToNavigate)
+
+            // 🔥 更新面包屑导航
+            breadcrumbNav.addPathItem(keyToNavigate, displayName)
+
+            // 🔥 重置分页状态
+            resetPaginationOnFolderChange()
+
+            // 🔥 清空选择
+            tableView.clearSelection()
+
+            // 🔥 延迟请求数据
+            Qt.callLater(function () {
+                if (rootItem.currentBucket) {
+                    ManagerGlobal.refreshObjects(rootItem.currentBucket,
+                                                 keyToNavigate)
+                } else {
+                    console.error("❌ 当前桶名无效")
+                    loadingOverlay.hide()
+                }
+            })
+        } catch (error) {
+            console.error("❌ 处理文件夹双击失败:", error)
+            loadingOverlay.hide()
+        }
+    }
+    // 🔥 添加历史记录初始化函数
+    function initializeHistoryModels() {
+        console.log("🔄 初始化历史记录模型...")
+
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            console.warn("⚠️ ManagerGlobal 或 HistoryManager 不可用，稍后重试...")
+            // 延迟重试
+            Qt.callLater(function () {
+                initializeHistoryModels()
+            })
+            return
+        }
+
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            console.warn("⚠️ 无法获取 HistoryManager 实例")
+            return
+        }
+
+        try {
+            loadDownloadHistoryToModel()
+            loadUploadHistoryToModel()
+            console.log("✅ 历史记录模型初始化完成")
+        } catch (error) {
+            console.error("❌ 初始化历史记录模型失败:", error)
+        }
+    }
+
+    function loadDownloadHistoryToModel() {
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            return
+        }
+
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            return
+        }
+
+        try {
+            downloadHistoryModel.clear()
+            var historyList = historyManager.getDownloadHistory(100)
+
+            console.log("📥 MainPage 从数据库获取到下载历史记录:", historyList.length, "条")
+
+            for (var i = 0; i < historyList.length; i++) {
+                var item = historyList[i]
+
+                var record = {
+                    "name": item.fileName || item.name || "未知文件",
+                    "size": typeof item.size === 'number' ? item.size : (parseInt(item.size)
+                                                                         || 0),
+                    "progress": 1.0,
+                    "jobId": item.jobId || "",
+                    "status": "已完成",
+                    "speed": "",
+                    "startTime": typeof item.startTime
+                                 === 'number' ? item.startTime : (parseInt(
+                                                                      item.startTime)
+                                                                  || 0),
+                    "lastUpdateTime": typeof item.completedTime
+                                      === 'number' ? item.completedTime : (parseInt(
+                                                                               item.completedTime)
+                                                                           || 0),
+                    "completedTime": typeof item.completedTime
+                                     === 'number' ? item.completedTime : (parseInt(
+                                                                              item.completedTime)
+                                                                          || 0),
+                    "bucketName": item.bucketName || "",
+                    "key": item.objectKey || "",
+                    "localPath": item.localPath || ""
+                }
+
+                downloadHistoryModel.append(record)
+            }
+
+            console.log("✅ MainPage 下载历史记录加载完成，记录数:",
+                        downloadHistoryModel.count)
+        } catch (error) {
+            console.error("❌ MainPage 加载下载历史失败:", error)
+        }
+    }
+    function loadUploadHistoryToModel() {
+        if (!ManagerGlobal || !ManagerGlobal.getHistoryManager) {
+            return
+        }
+        var historyManager = ManagerGlobal.getHistoryManager()
+        if (!historyManager) {
+            return
+        }
+
+        try {
+            uploadHistoryModel.clear()
+            var historyList = historyManager.getUploadHistory(100)
+            console.log("📥 MainPage 从数据库获取到上传历史记录:", historyList.length, "条")
+
+            for (var i = 0; i < historyList.length; i++) {
+                var item = historyList[i]
+                var record = {
+                    "name": item.fileName || item.name || "未知文件",
+                    "size": typeof item.size === 'number' ? item.size : (parseInt(item.size)
+                                                                         || 0),
+                    "progress": 1.0,
+                    "jobId": item.jobId || "",
+                    "status": "已完成",
+                    "speed": "",
+                    "startTime": typeof item.startTime
+                                 === 'number' ? item.startTime : (parseInt(
+                                                                      item.startTime)
+                                                                  || 0),
+                    "lastUpdateTime": typeof item.completedTime
+                                      === 'number' ? item.completedTime : (parseInt(
+                                                                               item.completedTime)
+                                                                           || 0),
+                    "completedTime": typeof item.completedTime
+                                     === 'number' ? item.completedTime : (parseInt(
+                                                                              item.completedTime)
+                                                                          || 0),
+                    "bucketName": item.bucketName || "",
+                    "key": item.objectKey || "",
+                    "localPath": item.localPath || ""
+                }
+
+                uploadHistoryModel.append(record)
+            }
+
+            console.log("✅ MainPage 上传历史记录加载完成，记录数:", uploadHistoryModel.count)
+        } catch (error) {
+            console.error("❌ MainPage 加载上传历史失败:", error)
         }
     }
 }

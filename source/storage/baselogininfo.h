@@ -1,7 +1,6 @@
 ﻿#ifndef DAOLOGININFO_H
 #define DAOLOGININFO_H
 
-
 class BaseLoginInfo {
 public:
   BaseLoginInfo();

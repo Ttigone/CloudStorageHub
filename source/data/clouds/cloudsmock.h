@@ -37,6 +37,8 @@ public:
                  const std::string &localPath,
                  const TransProgressCallback &callback) override;
 
+  void deleteObject(const std::string &bucket, const std::string &key) override;
+
 private:
   QJsonValue m_mock;
 };

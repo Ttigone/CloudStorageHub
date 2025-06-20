@@ -18,25 +18,27 @@ public:
 signals:
   // 登录成功
   void loginSuccess();
+  void loginFailed(QString msg);
 
-  /**
-   * @brief 报错
-   * @param api 接口
-   * @param msg 信息
-   * @param req 请求信息
-   */
+  ///
+  /// @brief error
+  /// @param api 接口
+  /// @param msg 信息
+  /// @param req 请求信息
+  ///
   void error(int api, const std::string &msg, const QJsonValue &req);
 
   // 退出登录
   void unLogin();
 
+  // 在创建桶列表的时候链接信号
   // 返回用户对应存储桶列表
   void bucketsSuccess(QList<TtBucket>);
   // 成功获取对象列表
   void objectsSuccess(const QList<TtObject> &objects);
 
   // 成功删除存储桶
-  void deleteBucketSuccess(const std::string &bucketname);
+  void deleteBucketSuccess(const std::string &bucket);
 
   // 开始下载
   void startDownload(const std::string &jobId, const std::string &key,
@@ -55,6 +57,21 @@ signals:
                      qulonglong total);
   // 上传对象成功
   void uploadSuccess(const std::string &jobId);
+
+  void deleteObjectSuccess(const std::string &bucket, const std::string &key);
+
+  // 开始加载桶
+  void bucketsLoadingStarted();
+  // 完成加载桶
+    void bucketsLoadingFinished();
+    // 开始加载桶对象
+    void objectsLoadingStarted();
+    // 完成加载桶对象
+    void objectsLoadingFinished();
+
+    // 错误处理信号
+    void bucketsLoadingError(const QString &errorMessage);
+    void objectsLoadingError(const QString &errorMessage);
 };
 
 #endif // MANSIGNALS_H

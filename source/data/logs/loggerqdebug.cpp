@@ -30,10 +30,8 @@ void LoggerQDebug::print(const QString &file, int line, const QString &func,
 
   // 如果日志级别超过了告警
   if (level > GLOBAL::LOG_LEVEL::WARNING) {
-    // 获取线程 id
     QString threadInfo =
         STR(" Current Thread ID is %1.").arg(QString::asprintf("%p", tid));
-    // BUG 但是后续没有需用
   }
 
   // 日志消息
@@ -41,7 +39,6 @@ void LoggerQDebug::print(const QString &file, int line, const QString &func,
   if (var.canConvert<QString>()) {
     logMessage = var.toString();
   } else {
-    // 尝试转换 string 类型
     logMessage = var.toString();
   }
 
@@ -54,17 +51,18 @@ void LoggerQDebug::print(const QString &file, int line, const QString &func,
     logMessage = logMessage.mid(1, logMessage.length() - 2);
   }
 
-  if (level > GLOBAL::LOG_LEVEL::WARNING) // 如果日志级别超过了告警
+  if (level > GLOBAL::LOG_LEVEL::WARNING) 
   {
     QString threadInfo =
         STR(" Current Thread ID is %1.").arg(QString::asprintf("%p", tid));
-    qDebug() << front.toLocal8Bit().data() << threadInfo << logMessage;
-    // 都没有加到日志中
+    // qDebug() << front.toLocal8Bit().data() << threadInfo << logMessage;
+    // qDebug() << front.toUtf8() << threadInfo << logMessage.toUtf8();
+    qDebug() << front.toUtf8() << threadInfo << QString(logMessage.toUtf8());
   } else {
     // 使用qDebug而不是直接存文件，是为了打印QVariant类型 日志打印
-    qDebug() << front.toLocal8Bit().data() << logMessage;
+    // qDebug() << front.toLocal8Bit().data() << logMessage;
+    qDebug() << front.toUtf8() << logMessage;
   }
-  // BUG 后面似乎都没有输入到日志文件中
 }
 
 void LoggerQDebug::handle(QtMsgType type, const QMessageLogContext &context,
@@ -73,6 +71,7 @@ void LoggerQDebug::handle(QtMsgType type, const QMessageLogContext &context,
   Q_UNUSED(context);
   // 调用父类静态函数提供的路径
   QFile file(filePath());
+  // qDebug() << "filePath" << filePath();
   QString key("QVariant(");
   QString message = msg;
   message.replace(msg.indexOf(key), key.size(), ""); // chop(1) 去掉末尾字符

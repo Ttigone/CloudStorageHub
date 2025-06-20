@@ -86,14 +86,10 @@ public:
    */
   void setLevel(GLOBAL::LOG_LEVEL newLevel);
 
-  /**
-   * @brief 设置日志具体派生类
-   *
-   * 在插件层调用
-   *
-   * @param newLogger log派生类
-   */
-  // void setLogger(BasicLogger *newLogger);
+  ///
+  /// @brief setLogger 设置具体日志类
+  /// @param newLogger 日志类实例
+  ///
   void setLogger(BaseLogger *newLogger);
 
 signals:
@@ -110,7 +106,6 @@ private:
   void doLog(GLOBAL::LOG_LEVEL level, const QVariant &var, bool up) const;
 
 private:
-  // BasicLogger *m_logger = nullptr;
   BaseLogger *m_logger = nullptr;
   GLOBAL::LOG_LEVEL m_level;
   QString m_file; // 日志发生的文件
