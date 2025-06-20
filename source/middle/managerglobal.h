@@ -286,11 +286,6 @@ public:
   }
 
 private:
-  // 内部使用的历史记录保存方法
-  // PaginationProxyModel *m_bucketsPaginationModel{nullptr};
-  // PaginationProxyModel *m_objectsPaginationModel{nullptr};
-  // bool m_isFirstLoadBucketModel{false};
-
   HistoryManager *m_historyManager{nullptr};
 
   bool m_isBucketsLoading = false;

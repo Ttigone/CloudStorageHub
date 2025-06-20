@@ -10,12 +10,15 @@ ManagerCloud::ManagerCloud(QObject *parent) : QObject(parent) {
 
   m_bucketsWatcher = new QFutureWatcher<QList<TtBucket>>(this);
   m_objectsWatcher = new QFutureWatcher<QList<TtObject>>(this);
+  m_deleteBucketWatcher = new QFutureWatcher<bool>(this);
 
   // 缺失槽函数
   connect(m_bucketsWatcher, &QFutureWatcher<QList<TtBucket>>::finished, this,
           &ManagerCloud::handleBucketsLoaded);
   connect(m_objectsWatcher, &QFutureWatcher<QList<TtObject>>::finished, this,
           &ManagerCloud::handleObjectsLoaded);
+  connect(m_deleteBucketWatcher, &QFutureWatcher<bool>::finished, this,
+          &ManagerCloud::handleBucketDeleteCompleted);
 }
 
 ManagerCloud::~ManagerCloud() {
@@ -27,6 +30,10 @@ ManagerCloud::~ManagerCloud() {
   if (m_objectsWatcher->isRunning()) {
     m_objectsWatcher->cancel();
     m_objectsWatcher->waitForFinished();
+  }
+  if (m_deleteBucketWatcher->isRunning()) {
+    m_deleteBucketWatcher->cancel();
+    m_deleteBucketWatcher->waitForFinished();
   }
 }
 
@@ -55,11 +62,14 @@ void ManagerCloud::putBucket(const std::string &bucketName,
 }
 
 void ManagerCloud::deleteBucket(const std::string &bucketName) {
-  ManGLOBAL->mPlugin->clouds()->deleteBucket(bucketName);
-  // 成功删除桶
+  // ManGLOBAL->mPlugin->clouds()->deleteBucket(bucketName);
+  // // 成功删除桶
+  // emit ManGLOBAL->mSignal->deleteBucketSuccess(bucketName);
+  // // 刷新桶页面
+  // getBuckets();
+  deleteBucketAsync(bucketName);
+  // 此处发送信号, 前面执行失败不会执行这条语句
   emit ManGLOBAL->mSignal->deleteBucketSuccess(bucketName);
-  // 刷新桶页面
-  getBuckets();
 }
 
 void ManagerCloud::getObjects(const std::string &bucketName,
@@ -114,13 +124,8 @@ void ManagerCloud::putObject(const std::string &jobId,
                                              total_size);
     }
   };
-
-  // 路径的问题
-  // std::string localPathtest = "F:/MyProject/CloudStorageHub/"
-  //                             "build-CloudStorageHub-Desktop_Qt_6_6_3_MSVC2019_"
-  //                             "64bit-Release/CMakeCache.txt.prev";
-  // ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPathtest,
-  //                                         callback);
+  // key 有问题
+  qDebug() << "上传对象名" << bucketName << key << localPath;
   ManGLOBAL->mPlugin->clouds()->putObject(bucketName, key, localPath, callback);
   emit ManGLOBAL->mSignal->uploadSuccess(jobId);
 }
@@ -179,6 +184,15 @@ void ManagerCloud::getObjectsAsync(const std::string &bucketName,
   }
 }
 
+void ManagerCloud::deleteBucketAsync(const std::string &bucketName) {
+  emit ManGLOBAL->mSignal->bucketsLoadingStarted();
+  CloudsTC *clouds = dynamic_cast<CloudsTC *>(ManGLOBAL->mPlugin->clouds());
+  if (clouds) {
+    QFuture<bool> future = clouds->deleteBucketAsync(bucketName);
+    m_deleteBucketWatcher->setFuture(future);
+  }
+}
+
 void ManagerCloud::handleBucketsLoaded() {
   QList<TtBucket> buckets = m_bucketsWatcher->result();
   bucketsAlready(buckets);
@@ -189,4 +203,24 @@ void ManagerCloud::handleObjectsLoaded() {
   QList<TtObject> objects = m_objectsWatcher->result();
   emit ManGLOBAL->mSignal->objectsSuccess(objects);
   emit ManGLOBAL->mSignal->objectsLoadingFinished();
+}
+
+void ManagerCloud::handleBucketDeleteCompleted() {
+  try {
+    bool success = m_deleteBucketWatcher->result();
+
+    if (success) {
+      // 删除成功，发出信号并刷新桶列表
+      emit ManGLOBAL->mSignal->deleteBucketSuccess("");
+      getBuckets(); // 刷新桶列表
+    } else {
+      // 删除失败
+      emit ManGLOBAL->mSignal->bucketsLoadingError("删除桶失败");
+    }
+  } catch (const std::exception &e) {
+    emit ManGLOBAL->mSignal->bucketsLoadingError(
+        QString("删除桶时发生异常: %1").arg(e.what()));
+  }
+
+  emit ManGLOBAL->mSignal->bucketsLoadingFinished();
 }

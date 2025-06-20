@@ -91,12 +91,12 @@ public:
 
   void getBucketsAsync();
   void getObjectsAsync(const std::string &bucketName, const std::string &dir);
+  void deleteBucketAsync(const std::string &bucketName);
 
 private slots:
-  // 处理桶加载
   void handleBucketsLoaded();
-  // 处理对象加载
   void handleObjectsLoaded();
+  void handleBucketDeleteCompleted();
 
 private:
   /**
@@ -110,6 +110,7 @@ private:
 
   QFutureWatcher<QList<TtBucket>> *m_bucketsWatcher;
   QFutureWatcher<QList<TtObject>> *m_objectsWatcher;
+  QFutureWatcher<bool> *m_deleteBucketWatcher;
 };
 
 #endif // MANBUCKETS_H

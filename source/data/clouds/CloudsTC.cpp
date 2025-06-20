@@ -12,6 +12,7 @@
 #include <QtConcurrent>
 #include <config/errorcode.h>
 #include <cos_config.h>
+#include <request/object_req.h>
 
 CloudsTC::CloudsTC() {
   // 这里需要放到执行文件(.exe)所在目录的上一个目录
@@ -64,6 +65,11 @@ CloudsTC::getObjectsAsync(const std::string &bucketName,
 }
 QFuture<QList<TtBucket>> CloudsTC::bucketsAsync() {
   return QtConcurrent::run([this] { return bucketsInternal(); });
+}
+
+QFuture<bool> CloudsTC::deleteBucketAsync(const std::string &bucketName) {
+  return QtConcurrent::run(
+      [this, bucketName]() { return deleteBucketInternal(bucketName); });
 }
 
 QList<TtBucket> CloudsTC::buckets() {
@@ -146,7 +152,6 @@ std::string CloudsTC::getBucketLocation(const std::string &bucketName) {
 void CloudsTC::putBucket(const std::string &bucketName,
                          const std::string &location) {
   if (isBucketExists(bucketName)) {
-    // qDebug() << "bucketName exit";
     return;
   }
   // 创建推送桶请求
@@ -161,33 +166,86 @@ void CloudsTC::putBucket(const std::string &bucketName,
   // qcloud_cos::CosAPI cos(config);
   // 发送推送桶请求
   qcloud_cos::CosResult result = cos.PutBucket(req, &resp);
-  // qDebug() << "test";
-  // 推送成功, 但是返回值有问题
   if (!result.IsSucc()) {
     throwError(EC_331100, result);
   }
 }
 
 void CloudsTC::deleteBucket(const std::string &bucketName) {
-  // 删除存储桶，只能删除空的存储桶
-  if (!isBucketExists(bucketName)) {
-    return;
-  }
-  // qcloud_cos::DeleteBucketReq req(bucketName.toLocal8Bit().data());
-  qcloud_cos::DeleteBucketReq req(bucketName);
-  qcloud_cos::DeleteBucketResp resp;
-  // 存储对应的地区
-  std::string location = getBucketLocation(bucketName);
-  // m_config->SetRegion(location.toStdString());
-  m_config->SetRegion(location);
-  qcloud_cos::CosAPI cos(*m_config);
+  // // 删除存储桶，只能删除空的存储桶
+  // if (!isBucketExists(bucketName)) {
+  //   return;
+  // }
 
-  // 响应对象提供了获取和处理服务器返回结果的机制，
-  // 确保了 API 调用能够正确地处理和反馈操作的结果
-  qcloud_cos::CosResult result = cos.DeleteBucket(req, &resp);
-  if (!result.IsSucc()) {
-    throwError(EC_331300, result);
-  }
+  // std::string dir = "";
+  // qcloud_cos::GetBucketReq req(bucketName);
+  // // 设置分隔符号
+  // req.SetDelimiter("/");
+  // qcloud_cos::GetBucketResp resp;
+  // std::string location = getBucketLocation(bucketName);
+  // m_config->SetRegion(location);
+  // qcloud_cos::CosAPI cos(*m_config);
+  // qcloud_cos::CosResult result = cos.GetBucket(req, &resp);
+  // if (!result.IsSucc()) {
+  //   throwError(EC_331200, result);
+  // }
+
+  // QList<TtObject> rootDirs = this->getDirList(resp, dir);
+
+  // for (auto &dir : rootDirs) {
+  //   std::string dirNames = dir.name.toStdString();
+  //   if (!dirNames.empty()) {
+  //     dirNames.pop_back();
+  //   }
+  //   qDebug() << dirNames;
+  //   qcloud_cos::DeleteObjectsByPrefixReq req(bucketName, dirNames);
+  //   qcloud_cos::DeleteObjectsByPrefixResp resp;
+  //   qcloud_cos::CosAPI cos(*m_config);
+  //   qcloud_cos::CosResult result = cos.DeleteObjects(req, &resp);
+  //   if (!result.IsSucc()) {
+  //     throwError(EC_332800, result);
+  //   }
+  // }
+  // {
+  //   // 根目录下的所有文件
+  //   std::vector<qcloud_cos::ObjectVersionPair> toBeDeleted;
+  //   QList<TtObject> rootObjs = getFileList(resp, dir);
+
+  //   for (auto &obj : rootObjs) {
+  //     std::string objectName = obj.key.toStdString();
+  //     std::string versionId = "";
+  //     qDebug() << obj.key;
+  //     toBeDeleted.push_back(
+  //         qcloud_cos::ObjectVersionPair(objectName, versionId));
+  //   }
+  //   qcloud_cos::DeleteObjectsReq req(bucketName, toBeDeleted);
+  //   qcloud_cos::DeleteObjectsResp resp;
+  //   qcloud_cos::CosAPI cos(*m_config);
+  //   qcloud_cos::CosResult result = cos.DeleteObjects(req, &resp);
+  //   if (!result.IsSucc()) {
+  //     throwError(EC_332700, result);
+  //   }
+  // }
+
+  // {
+  //   qcloud_cos::DeleteBucketReq req(bucketName);
+  //   qcloud_cos::DeleteBucketResp resp;
+  //   std::string location = getBucketLocation(bucketName);
+  //   m_config->SetRegion(location);
+  //   qcloud_cos::CosAPI cos(*m_config);
+  //   // 响应对象提供了获取和处理服务器返回结果的机制，
+  //   // 确保了 API 调用能够正确地处理和反馈操作的结果
+  //   qcloud_cos::CosResult result = cos.DeleteBucket(req, &resp);
+  //   if (!result.IsSucc()) {
+  //     throwError(EC_331300, result);
+  //   }
+  // }
+  // 现在调用内部方法
+  bool result = deleteBucketInternal(bucketName);
+  // if (result) {
+  //   // // 有信号
+  //   // emit ManGLOBAL->mSignal->deleteBucketSuccess(bucketName);
+  // }
 }
 
 QList<TtObject> CloudsTC::getObjects(const std::string &bucketName,
@@ -201,18 +259,15 @@ QList<TtObject> CloudsTC::getObjects(const std::string &bucketName,
   req.SetDelimiter("/");
 
   qcloud_cos::GetBucketResp resp;
-  // 设置地址
   std::string location = getBucketLocation(bucketName);
   m_config->SetRegion(location);
   qcloud_cos::CosAPI cos(*m_config);
-  // 获取结果
   qcloud_cos::CosResult result = cos.GetBucket(req, &resp);
   if (!result.IsSucc()) {
     throwError(EC_331200, result);
   }
   // 获取该桶层级下的所有文件夹和文件对象
   // dir 是 测试文件/
-  // 执行第一次
   qDebug() << "dir" << dir;
   return getDirList(resp, dir) + getFileList(resp, dir);
 }
@@ -222,25 +277,16 @@ bool CloudsTC::isObjectExists(const std::string &bucketname,
   std::string location = getBucketLocation(bucketname);
   m_config->SetRegion(location);
   qcloud_cos::CosAPI cos(*m_config);
-  // 判断文件对象是否存在
   return cos.IsObjectExist(bucketname, key);
 }
 
 void CloudsTC::throwError(const std::string &code,
                           qcloud_cos::CosResult &result) {
-  // QString msg =
-  //     QString::fromUtf8("腾讯云错误码[%1]: %2")
-  //         .arg(result.GetErrorCode().c_str(), result.GetErrorMsg().c_str());
   QString msg =
       QString("腾讯云错误码[%1]: %2")
           .arg(result.GetErrorCode().c_str(), result.GetErrorMsg().c_str());
-  // 构错误码, 但是乱码
-  qDebug() << msg;
-  qDebug() << QString(code.c_str());
-  // 正确
   qDebug() << QString(msg.toUtf8());
-  // 抛出异常, 但是没有捕获啊
-  throw BaseException(QString(code.c_str()), msg); // 输出到日志里
+  throw BaseException(QString(code.c_str()), msg);
 }
 
 TtBucket CloudsTC::getBucketByName(const std::string &bucketName) {
@@ -259,26 +305,15 @@ TtBucket CloudsTC::getBucketByName(const std::string &bucketName) {
 void CloudsTC::putObject(const std::string &bucketName, const std::string &key,
                          const std::string &localPath,
                          const TransProgressCallback &callback) {
-  // 初始化上传
   qcloud_cos::SharedAsyncContext context;
-  std::setlocale(LC_ALL, ".UTF-8"); // 这一步会处理路径中的中文符号，必不可少
-  // 异步上传
+  std::setlocale(LC_ALL,
+                 ".UTF-8"); // 这一步会处理路径中的中文符号，必不可少
   qcloud_cos::AsyncPutObjectReq put_req(bucketName, key, localPath);
-  // 桶名正确, 文件名正确, 路径不正确
-  // 本地路径问题
-  // 替换成 /
-  // localPath =
-  //     QString("F:/MyProject/CloudStorageHub/"
-  //             "build-CloudStorageHub-Desktop_Qt_6_6_3_MSVC2019_64bit-Release/"
-  //             "CMakeCache.txt.prev")
-  // .toStdString();
-  qDebug() << bucketName << key << localPath;
-
-  // 设置上传进度回调
+  // 获取的 key 有问题
+  qDebug() << "上传" << bucketName << key << localPath;
   if (callback) {
     put_req.SetTransferProgressCallback(callback);
   }
-
   // 根据桶名，获取远端的地域设置
   std::string location = getBucketLocation(bucketName);
   m_config->SetRegion(location);
@@ -356,7 +391,8 @@ QList<TtObject> CloudsTC::getDirList(qcloud_cos::GetBucketResp &resp,
     // 文件夹没有修改时间
     object.lastmodified = "-";
     object.key = key;
-    // qDebug() << "dir: " << object.dir << object.name << object.lastmodified
+    // qDebug() << "dir: " << object.dir << object.name <<
+    // object.lastmodified
     //          << object.key;
     // 添加了 name 是空的
     res.append(object);
@@ -450,4 +486,167 @@ QList<TtBucket> CloudsTC::bucketsInternal() {
   }
 
   return res;
+}
+
+bool CloudsTC::deleteAllObjectsInBucket(const std::string &bucketName,
+                                        qcloud_cos::CosAPI &cos) {
+  try {
+    bool hasMoreObjects = true;
+    std::string marker = "";
+    int totalDeleted = 0;
+
+    while (hasMoreObjects) {
+      // 获取对象列表
+      qcloud_cos::GetBucketReq listReq(bucketName);
+      listReq.SetMaxKeys(1000); // 每次最多处理1000个对象
+      if (!marker.empty()) {
+        listReq.SetMarker(marker);
+      }
+
+      qcloud_cos::GetBucketResp listResp;
+      qcloud_cos::CosResult listResult = cos.GetBucket(listReq, &listResp);
+
+      if (!listResult.IsSucc()) {
+        // qDebug() << "获取对象列表失败:" <<
+        // listResult.GetErrorMsg().c_str();
+        qDebug() << "获取对象列表失败:";
+        return false;
+      }
+
+      auto contents = listResp.GetContents();
+
+      if (contents.empty()) {
+        hasMoreObjects = false;
+        break;
+      }
+
+      // 🔥 批量删除对象
+      if (!batchDeleteObjects(bucketName, contents, cos)) {
+        qDebug() << "批量删除对象失败";
+        return false;
+      }
+
+      totalDeleted += contents.size();
+      qDebug() << "已删除" << totalDeleted << "个对象";
+
+      // 检查是否还有更多对象
+      hasMoreObjects = listResp.IsTruncated();
+      if (hasMoreObjects) {
+        marker = listResp.GetNextMarker();
+      }
+    }
+
+    qDebug() << "总共删除了" << totalDeleted << "个对象";
+    return true;
+
+  } catch (...) {
+    qDebug() << "删除桶内对象时发生异常";
+    return false;
+  }
+}
+
+bool CloudsTC::batchDeleteObjects(
+    const std::string &bucketName,
+    const std::vector<qcloud_cos::Content> &objects, qcloud_cos::CosAPI &cos) {
+  try {
+    if (objects.empty()) {
+      return true;
+    }
+
+    // 准备删除请求
+    qcloud_cos::DeleteObjectsReq deleteReq(bucketName);
+
+    for (const auto &obj : objects) {
+      // deleteReq.AddObjectKey(obj.m_key);
+      deleteReq.AddObject(obj.m_key);
+    }
+
+    qcloud_cos::DeleteObjectsResp deleteResp;
+    qcloud_cos::CosResult deleteResult =
+        cos.DeleteObjects(deleteReq, &deleteResp);
+
+    if (!deleteResult.IsSucc()) {
+      qDebug() << "批量删除失败:" << deleteResult.GetErrorMsg().c_str();
+      return false;
+    }
+
+    // 检查删除结果
+    // auto deletedObjects = deleteResp.GetSuccessDelObjs();
+    // auto errorObjects = deleteResp.GetErrorDelObjs();
+
+    // if (!errorObjects.empty()) {
+    //   qDebug() << "部分对象删除失败，错误数量:" << errorObjects.size();
+    //   for (const auto &errorObj : errorObjects) {
+    //     qDebug() << "删除失败的对象:" << errorObj.c_str();
+    //   }
+    //   return false;
+    // }
+
+    // qDebug() << "批量删除成功，删除对象数:" << deletedObjects.size();
+    qDebug() << "批量删除成功，删除对象数:";
+    return true;
+
+  } catch (...) {
+    qDebug() << "批量删除对象时发生异常";
+    return false;
+  }
+}
+
+bool CloudsTC::deleteBucketInternal(const std::string &bucketName) {
+  try {
+    // 删除存储桶，只能删除空的存储桶
+    if (!isBucketExists(bucketName)) {
+      return false;
+    }
+
+    std::string dir = "";
+    qcloud_cos::GetBucketReq req(bucketName);
+    req.SetDelimiter("/");
+    qcloud_cos::GetBucketResp resp;
+    std::string location = getBucketLocation(bucketName);
+
+    QMutexLocker locker(&m_configMutex);
+    m_config->SetRegion(location);
+    qcloud_cos::CosAPI cos(*m_config);
+    locker.unlock();
+
+    qcloud_cos::CosResult result = cos.GetBucket(req, &resp);
+    if (!result.IsSucc()) {
+      throwError(EC_331200, result);
+      return false;
+    }
+
+    QList<TtObject> rootDirs = this->getDirList(resp, dir);
+
+    // 删除所有根目录下的文件夹和文件
+    for (auto &dir : rootDirs) {
+      std::string dirNames = dir.name.toStdString();
+      if (!dirNames.empty()) {
+        dirNames.pop_back();
+      }
+      deleteAllObjectsInBucket(bucketName, cos);
+    }
+
+    // 删除桶内所有对象
+    if (!deleteAllObjectsInBucket(bucketName, cos)) {
+      qDebug() << "删除桶内对象失败";
+      return false;
+    }
+
+    // 最后删除空桶
+    qcloud_cos::DeleteBucketReq deleteBucketReq(bucketName);
+    qcloud_cos::DeleteBucketResp deleteBucketResp;
+    qcloud_cos::CosResult deleteBucketResult =
+        cos.DeleteBucket(deleteBucketReq, &deleteBucketResp);
+
+    if (!deleteBucketResult.IsSucc()) {
+      throwError(EC_331300, deleteBucketResult);
+      return false;
+    }
+
+    return true;
+  } catch (const std::exception &e) {
+    qDebug() << "删除桶时发生异常:" << e.what();
+    return false;
+  }
 }

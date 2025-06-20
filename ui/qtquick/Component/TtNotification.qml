@@ -601,6 +601,8 @@ Item {
     
     // 公开的方法
     function show(msg, type = "info", autoHideAfter = 3000) {
+        // 都没有输出执行
+        console.log("Showing notification:", msg, "Type:", type)
         notificationRect.showToast(msg, type)
         if (autoHide && autoHideAfter > 0) {
             hideTimer.interval = autoHideAfter

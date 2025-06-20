@@ -15,12 +15,11 @@ public:
   CloudsTC();
   ~CloudsTC();
 
-  QFuture<QList<TtObject>> getObjectsAsync(
-    const std::string &bucketName,
-    const std::string &dir
-  );
+  QFuture<QList<TtObject>> getObjectsAsync(const std::string &bucketName,
+                                           const std::string &dir);
   QFuture<QList<TtBucket>> bucketsAsync();
 
+  QFuture<bool> deleteBucketAsync(const std::string &bucketName);
 
   QList<TtBucket> buckets() override;
 
@@ -86,12 +85,22 @@ private:
   void throwError(const std::string &code, qcloud_cos::CosResult &result);
 
 private:
-  QList<TtObject> getObjectsInternal(const std::string&bucketName, const std::string &dir);
+  QList<TtObject> getObjectsInternal(const std::string &bucketName,
+                                     const std::string &dir);
   QList<TtBucket> bucketsInternal();
+
+  bool deleteAllObjectsInBucket(const std::string &bucketName,
+                                qcloud_cos::CosAPI &cos);
+
+  bool batchDeleteObjects(const std::string &bucketName,
+                          const std::vector<qcloud_cos::Content> &objects,
+                          qcloud_cos::CosAPI &cos);
+                          bool deleteBucketInternal(const std::string &bucketName);
+
+
 
   qcloud_cos::CosConfig *m_config = nullptr;
   QMutex m_configMutex; // 保护配置访问的互斥锁
-
 };
 
 #endif // CLOUDSTC_H

@@ -139,8 +139,7 @@ void GateWay::apiPutObject(const QJsonValue &params) {
   QString bucketName = params["bucketName"].toString();
   QString key = params["key"].toString();
   QString localPath = params["localPath"].toString();
-  // 执行了这里的语句, 上传的语句文件名是正确的
-  // 否面执行无法打开文件
+  // key 对的
   mWarning(STR("The User Upload a Object named: %1").arg(key));
   ManGLOBAL->mCloud->putObject(jobId.toStdString(), bucketName.toStdString(),
                                key.toStdString(), localPath.toStdString());

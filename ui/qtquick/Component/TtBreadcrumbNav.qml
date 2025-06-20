@@ -86,9 +86,7 @@ Rectangle {
 
     function clearModel() {
         console.log("完全清除面包屑导航模型")
-        // 设置空模型
         setPath([])
-        // 发出路径变化信号
         pathChanged()
     }
 
@@ -98,16 +96,38 @@ Rectangle {
     }
 
     function getCurrentPath() {
-        // if (m_model.length > 0) {
-        //     console.log("返回空")
-        //     return ""
-        // }
+        // 获取的是当前文件夹
         if (m_model.length === 0) {
             console.log("返回空")
             return ""
         }
         console.log("返回名字: ", m_model[m_model.length - 1].name)
         return m_model[m_model.length - 1].name
+    }
+
+    function getPath() {
+        // 获取除了根(桶目录)之外的路径
+        if (m_model.length <= 1) {
+            console.log("空")
+            return ""
+        }
+        // 从索引1开始（跳过根目录/桶名），构建路径
+        var pathParts = []
+        for (var i = 1; i < m_model.length; i++) {
+            if (m_model[i] && m_model[i].name) {
+                pathParts.push(m_model[i].name)
+            }
+        }
+
+        // 用 "/" 连接路径部分
+        var relativePath = pathParts.join("/")
+
+        // 如果有路径且不以 "/" 结尾，添加 "/"
+        if (relativePath && !relativePath.endsWith("/")) {
+            relativePath += "/"
+        }
+
+        return relativePath
     }
 
     // 布局
@@ -149,68 +169,6 @@ Rectangle {
                 }
             }
         }
-
-        // // 使用 ListView 实现面包屑
-        // ListView {
-        //     id: breadcrumbList
-        //     Layout.fillWidth: true
-        //     Layout.preferredHeight: 30
-        //     orientation: ListView.Horizontal
-        //     model: root.m_model
-        //     interactive: true
-        //     clip: true
-        //     spacing: 4
-        //     boundsBehavior: Flickable.StopAtBounds
-
-        //     // 当路径变化时自动滚动到最右侧
-        //     onCountChanged: {
-        //         positionViewAtEnd()
-        //     }
-
-        //     delegate: Row {
-        //         spacing: 4
-        //         height: breadcrumbList.height
-
-        //         // 分隔符
-        //         Text {
-        //             text: "/"
-        //             font.pixelSize: 14
-        //             color: separatorColor
-        //             verticalAlignment: Text.AlignVCenter
-        //             height: parent.height
-        //             // 分隔符的可视化, 索引大于 0, 对应的 id 值为 非 root, 或者不是 all
-        //             visible: index > 0 || (modelData.id !== "root"
-        //                                    && modelData.id !== "all")
-        //         }
-        //         Text {
-        //             id: pathItemText
-        //             // text: modelData.name
-        //             font.pixelSize: 14
-        //             color: textColor
-        //             verticalAlignment: Text.AlignVCenter
-        //             height: parent.height
-        //             MouseArea {
-        //                 anchors.fill: parent
-        //                 cursorShape: Qt.PointingHandCursor
-        //                 onClicked: {
-        //                     console.log("index: ", index)
-        //                     root.navigateToLevel(index)
-        //                     // 会将当前点击的值发送
-        //                     console.log("导航到文件夹:", modelData.name)
-        //                     // pathItemClicked(modelData.name)
-        //                     pathItemClicked(modelData.id)
-        //                 }
-        //             }
-        //         }
-        //     }
-
-        //     // 添加水平滚动条
-        //     ScrollBar.horizontal: ScrollBar {
-        //         policy: ScrollBar.AsNeeded
-        //         interactive: true
-        //         height: 8
-        //     }
-        // }
         // 修改 ListView 配置
         ListView {
             id: breadcrumbList
@@ -230,6 +188,7 @@ Rectangle {
             // 当模型变化时的处理
             onModelChanged: {
                 if (debugMode) {
+
                     // console.log("ListView 模型变化:",
                     //             model ? JSON.stringify(model) : "null")
                     // console.log("ListView 项目数量:", count)

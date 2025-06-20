@@ -311,11 +311,8 @@ Window {
                         border.width: 1
                     }
                     // 列表作为历史记录模型
-                    // 历史记录
                     historyModel: {
-                        // 获取是空的
                         console.log("历史记录: ", dialog.loginNames)
-                        // return dialog.loginNames
                         return getLoginHistory()
                     }
                     // 连接删除历史记录信号
@@ -328,26 +325,13 @@ Window {
                             // 选择无效
                             fillLoginInfo(value)
                             // 填充信息
-                            console.log("已自动填充用户 " + value + " 的登录信息")
+                            // console.log("已自动填充用户 " + value + " 的登录信息")
                         } catch (e) {
-                            console.error("加载登录信息失败:", e)
+                            // console.error("加载登录信息失败:", e)
                         }
                     }
                     // 添加文本变化处理
                     onTextChanged: {
-                        // 是这里不全的
-                        // var historyList = getLoginHistory()
-                        // if (historyList.indexOf(text) !== -1) {
-                        //     // if (loginName.text.length > 0) {
-                        //     //     var historyList1 = getLoginHistory()
-                        //     //     if (historyList1.indexOf(
-                        //     //                 loginName.text) !== -1) {
-                        //     //         fillLoginInfo(loginName.text)
-                        //     //     }
-                        //     // }
-                        //     // 延迟填充，避免在用户还在输入时干扰
-                        //     autoFillTimer.restart()
-                        // }
                     }
                 }
                 // 在登录名输入框下方添加状态指示器

@@ -21,23 +21,19 @@ Dialog {
     width: 600
     height: 500
 
-    // 1. 将 ListModel 定义在 Dialog 级别，确保全局可访问
     ListModel {
         id: fileListModel
     }
 
-    // 使用纯绑定方式，确保实时居中
     x: parent ? Math.max(0, Math.min((parent.width - width) / 2,
                                      parent.width - width)) : 0
     y: parent ? Math.max(0, Math.min((parent.height - height) / 2,
                                      parent.height - height)) : 0
 
-    // 初始居中
     Component.onCompleted: {
         if (ManagerGlobal && ManagerGlobal.getBucketNames) {
             bucketList = ManagerGlobal.getBucketNames()
         }
-        // 强制触发一次位置更新
         Qt.callLater(function () {
             console.log("对话框初始位置:", x, y, "父窗口大小:", parent ? parent.width : 0,
                         parent ? parent.height : 0)
@@ -52,17 +48,28 @@ Dialog {
             var tasks = []
             for (var i = 0; i < fileListModel.count; i++) {
                 var item = fileListModel.get(i)
+                // remotePath 在桶目录时, 是空的
+                // 这里发送 targetPath 是错误的
+                // 桶目录下应该为空
+                console.log("localPath: ", item.filePath, "fileName",
+                            item.fileName, "bucket", targetBucket,
+                            "remotePath", targetPath)
+                // 如果是与桶名相同呢 ?
+                // if (targetPath == targetBucket) {
+                //     targetPath = ""
+                // }
                 if (item.selected) {
                     tasks.push({
                                    "localPath": item.filePath,
                                    "fileName": item.fileName,
                                    "bucket": targetBucket,
-                                   "remotePath": targetPath,
+                                   "remotePath": targetPath || "",
                                    "fileSize": 0,
                                    "status": "待上传"
                                })
                 }
             }
+            // 任务信号
             uploadRequested(tasks)
         }
     }
@@ -807,7 +814,6 @@ Dialog {
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
-
                                 onClicked: openFileDialog()
                             }
                         }

@@ -14,10 +14,15 @@ Rectangle {
     property bool showIcon: true
     property bool clickable: false
 
+    property bool showProgress: true
+    property bool autoClose: true
+    property bool progressStarted: false
+
     property var onClicked: null
     property var onClosed: null
 
-    property bool _isShowing: false
+    // property bool _isShowing: false
+    property bool _isShowing: true
     property real _targetY: 0
 
     width: 240
@@ -151,7 +156,65 @@ Rectangle {
             }
         }
     }
-    Rectangle {
+    // Rectangle {
+    //     id: progressBar
+    //     anchors.left: parent.left
+    //     anchors.right: parent.right
+    //     anchors.bottom: parent.bottom
+    //     anchors.leftMargin: 8
+    //     anchors.rightMargin: 8
+    //     anchors.bottomMargin: 6
+    //     height: 2
+    //     color: "transparent"
+    //     // visible: duration > 0
+    //     visible: duration > 0 && showProgress
+
+    //     Rectangle {
+    //         id: progressBackground
+    //         anchors.fill: parent
+    //         color: getProgressBarColor()
+    //         radius: parent.height / 2
+    //         opacity: 0.4
+    //     }
+
+    //     Rectangle {
+    //         id: progressFill
+    //         anchors.left: parent.left
+    //         anchors.top: parent.top
+    //         anchors.bottom: parent.bottom
+    //         width: parent.width
+    //         color: getAccentColor()
+    //         radius: parent.height / 2
+
+    //         gradient: Gradient {
+    //             GradientStop {
+    //                 position: 0.0
+    //                 color: Qt.lighter(getAccentColor(), 1.1)
+    //             }
+    //             GradientStop {
+    //                 position: 1.0
+    //                 color: getAccentColor()
+    //             }
+    //         }
+
+    //         NumberAnimation on width {
+    //             id: progressAnimation
+    //             from: progressBar.width
+    //             to: 0
+    //             duration: notification.duration
+    //             running: false
+    //             easing.type: Easing.Linear 
+
+    //             onFinished: {
+    //                 if (notification._isShowing && notification.autoClose) {
+    //                     notification.close()
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+  Rectangle {
         id: progressBar
         anchors.left: parent.left
         anchors.right: parent.right
@@ -161,7 +224,13 @@ Rectangle {
         anchors.bottomMargin: 6
         height: 2
         color: "transparent"
-        visible: duration > 0
+        // 🔥 修复可见性条件
+        visible: showProgress && duration > 0 && autoClose
+
+        // 🔥 调试进度条可见性
+        onVisibleChanged: {
+            console.log("📊 进度条可见性变化:", visible, "条件: showProgress=", showProgress, "duration=", duration, "autoClose=", autoClose)
+        }
 
         Rectangle {
             id: progressBackground
@@ -176,7 +245,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: parent.width
+            width: parent.width // 🔥 初始宽度为满格
             color: getAccentColor()
             radius: parent.height / 2
 
@@ -197,11 +266,17 @@ Rectangle {
                 to: 0
                 duration: notification.duration
                 running: false
+                easing.type: Easing.Linear
 
                 onFinished: {
-                    if (notification._isShowing) {
+                    console.log("🏁 进度条动画完成，标题:", notification.title)
+                    if (notification._isShowing && notification.autoClose) {
                         notification.close()
                     }
+                }
+
+                onRunningChanged: {
+                    console.log("🎮 进度条动画运行状态变化:", running, "通知:", notification.title)
                 }
             }
         }
@@ -252,56 +327,108 @@ Rectangle {
 //         })
 //     }
 // }
+    //     function show() {
+    //     _isShowing = true
+    //     console.log("🎬 开始显示通知:", title, "持续时间:", duration, "显示进度条:", showProgress)
+        
+    //     // 🔥 关键修复：确保进度条动画正确启动
+    //     if (duration > 0 && showProgress && !progressStarted && autoClose) {
+    //         console.log("⏱️ 准备启动进度条动画")
+    //         progressStarted = true
+            
+    //         // 🔥 延迟启动，确保UI完全渲染和可见
+    //         Qt.callLater(function() {
+    //             if (notification._isShowing && progressAnimation && notification.visible) {
+    //                 console.log("✅ 正在启动进度条动画，从", progressFill.width, "到 0，持续时间:", duration)
+                    
+    //                 // 确保进度条可见且有正确的初始状态
+    //                 progressBar.visible = true
+    //                 progressFill.width = progressBar.width
+                    
+    //                 // 启动动画
+    //                 progressAnimation.start()
+                    
+    //                 console.log("🔄 进度条动画已启动，运行状态:", progressAnimation.running)
+    //             } else {
+    //                 console.warn("⚠️ 无法启动进度条动画 - 条件检查失败")
+    //                 console.warn("_isShowing:", notification._isShowing)
+    //                 console.warn("progressAnimation存在:", !!progressAnimation)
+    //                 console.warn("visible:", notification.visible)
+    //             }
+    //         })
+    //     } else {
+    //         console.log("🚫 跳过进度条动画 - duration:", duration, "showProgress:", showProgress, "progressStarted:", progressStarted, "autoClose:", autoClose)
+    //     }
+    // }
     function show() {
         _isShowing = true
+        console.log("🎬 开始显示通知:", title, "持续时间:", duration, "显示进度条:", showProgress, "自动关闭:", autoClose)
         
-        console.log("🎬 开始显示通知动画，当前位置:", x, y)
+        // 🔥 强制更新进度条可见性
+        if (showProgress && duration > 0 && autoClose) {
+            progressBar.visible = true
+            console.log("✅ 强制设置进度条可见")
+        }
         
-        // 🔥 不在这里启动入场动画，由管理器控制
-        // showAnimation.start()  // 注释掉这行
-        
-        // 启动进度条动画
-        if (duration > 0) {
-            console.log("⏱️ 启动进度条动画，持续时间:", duration)
+        // 🔥 启动进度条动画
+        if (duration > 0 && showProgress && !progressStarted && autoClose) {
+            console.log("⏱️ 准备启动进度条动画")
+            progressStarted = true
+            
             Qt.callLater(function() {
-                if (progressAnimation) {
+                if (notification._isShowing && progressAnimation && notification.visible) {
+                    console.log("✅ 正在启动进度条动画，从", progressFill.width, "到 0，持续时间:", duration)
+                    
+                    // 确保进度条初始状态正确
+                    progressFill.width = progressBar.width
+                    
+                    // 启动动画
                     progressAnimation.start()
-                    console.log("✅ 进度条动画已启动")
+                    
+                    console.log("🔄 进度条动画已启动，运行状态:", progressAnimation.running)
+                } else {
+                    console.warn("⚠️ 无法启动进度条动画 - 条件检查失败")
                 }
             })
+        } else {
+            console.log("🚫 跳过进度条动画 - duration:", duration, "showProgress:", showProgress, "progressStarted:", progressStarted, "autoClose:", autoClose)
         }
+    }
+     function stopProgress() {
+        if (progressAnimation.running) {
+            progressAnimation.stop()
+            console.log("⏹️ 进度条动画已停止")
+        }
+        progressStarted = false
     }
     function startEnterAnimation() {
         showAnimation.start()
     }
 
-    function close() {
+    // function close() {
+    //     _isShowing = false
+    //     hideAnimation.start()
+    // }
+        function close() {
+        console.log("🔴 关闭通知:", title)
         _isShowing = false
+        stopProgress()  // 停止进度条
         hideAnimation.start()
     }
+        function pauseProgress() {
+        if (progressAnimation.running) {
+            progressAnimation.pause()
+            console.log("⏸️ 进度条已暂停")
+        }
+    }
+        function resumeProgress() {
+        if (progressAnimation.paused) {
+            progressAnimation.resume()
+            console.log("▶️ 进度条已恢复")
+        }
+    }
 
-    // ParallelAnimation {
-    //     id: showAnimation
 
-    //     NumberAnimation {
-    //         target: notification
-    //         property: "x"
-    //         from: notification.parent ? notification.parent.width : 400
-    //         to: notification._targetY
-    //         duration: 400
-    //         easing.type: Easing.OutBack
-    //         easing.overshoot: 1.2
-    //     }
-
-    //     NumberAnimation {
-    //         target: notification
-    //         property: "opacity"
-    //         from: 0
-    //         to: 1
-    //         duration: 300
-    //         easing.type: Easing.OutCubic
-    //     }
-    // }
     ParallelAnimation {
         id: showAnimation
 
@@ -472,4 +599,12 @@ Rectangle {
     function getProgressBarColor() {
         return "#E2E8F0"
     }
+     Component.onCompleted: {
+        console.log("📱 通知组件创建完成:", title)
+        console.log("  - 持续时间:", duration)
+        console.log("  - 显示进度条:", showProgress)
+        console.log("  - 自动关闭:", autoClose)
+        console.log("  - 进度条可见:", progressBar.visible)
+    }
 }
+

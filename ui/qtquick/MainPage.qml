@@ -22,6 +22,200 @@ Item {
     property var breadcrumbPathData: []
     property var transferWindow: null
 
+    property var originalBucketModel: null
+    property var originalObjectModel: null
+    function getBucketCompletionData() {
+        if (!tableView.inBucketMode) {
+            return []
+        }
+
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.warn("无法获取桶模型")
+                return []
+            }
+
+            var completions = []
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var bucketName = bucketModel.data(index, Qt.DisplayRole) || ""
+                if (bucketName) {
+                    completions.push(bucketName)
+                }
+            }
+
+            console.log("获取到桶补全数据:", completions.length, "个桶")
+            return completions
+        } catch (error) {
+            console.error("获取桶补全数据失败:", error)
+            return []
+        }
+    }
+
+    // 🔥 获取文件补全数据
+    function getFileCompletionData() {
+        if (tableView.inBucketMode) {
+            return []
+        }
+
+        try {
+            var objectModel = ManagerGlobal.getObjectsModel()
+            if (!objectModel) {
+                console.warn("无法获取对象模型")
+                return []
+            }
+
+            var completions = []
+            for (var i = 0; i < objectModel.rowCount(); i++) {
+                var index = objectModel.index(i, 0)
+                var objectName = objectModel.data(index, Qt.DisplayRole) || ""
+                if (objectName) {
+                    completions.push(objectName)
+                }
+            }
+
+            console.log("获取到文件补全数据:", completions.length, "个文件")
+            return completions
+        } catch (error) {
+            console.error("获取文件补全数据失败:", error)
+            return []
+        }
+    }
+
+    // 🔥 更新补全模型
+    function updateCompletionModel() {
+        try {
+            var newCompletions
+            if (tableView.inBucketMode) {
+                newCompletions = getBucketCompletionData()
+            } else {
+                newCompletions = getFileCompletionData()
+            }
+
+            // 更新搜索框的补全模型
+            searchField.completionModel = newCompletions
+            console.log("补全模型已更新:", newCompletions.length, "项")
+        } catch (error) {
+            console.error("更新补全模型失败:", error)
+        }
+    }
+    function performSearch(query) {
+        if (!query || query.trim() === "") {
+            resetSearch()
+            return
+        }
+        // console.log("🔍 执行搜索:", query, "当前模式:",
+        //             tableView.inBucketMode ? "桶模式" : "对象模式")
+        if (tableView.inBucketMode) {
+            // 搜索桶
+            searchBuckets(query)
+        } else {
+            // 搜索对象
+            searchObjects(query)
+        }
+    }
+
+    function searchBuckets(query) {
+        try {
+            var bucketModel = ManagerGlobal.getBucketsModel()
+            if (!bucketModel) {
+                console.error("❌ 无法获取桶模型")
+                return
+            }
+
+            // 保存原始模型（如果还没保存）
+            if (!originalBucketModel) {
+                originalBucketModel = bucketModel
+            }
+
+            console.log("🔍 在", bucketModel.rowCount(), "个桶中搜索:", query)
+
+            // 创建过滤后的结果
+            var filteredResults = []
+            var queryLower = query.toLowerCase()
+
+            for (var i = 0; i < bucketModel.rowCount(); i++) {
+                var index = bucketModel.index(i, 0)
+                var bucketName = bucketModel.data(index, Qt.DisplayRole) || ""
+
+                if (bucketName.toLowerCase().indexOf(queryLower) !== -1) {
+                    filteredResults.push({
+                                             "name": bucketName,
+                                             "zone": bucketModel.data(
+                                                         bucketModel.index(i,
+                                                                           1),
+                                                         Qt.DisplayRole) || "",
+                                             "createTime": bucketModel.data(
+                                                               bucketModel.index(
+                                                                   i, 2),
+                                                               Qt.DisplayRole)
+                                                           || ""
+                                         })
+                }
+            }
+
+            console.log("🔍 找到", filteredResults.length, "个匹配的桶")
+
+            // 应用过滤结果
+            applyBucketSearchResults(filteredResults)
+        } catch (error) {
+            console.error("❌ 搜索桶时出错:", error)
+        }
+    }
+    function applyBucketSearchResults(results) {
+        try {
+            // 这里需要根据您的模型实现来调整
+            // 如果您的模型支持过滤，可以设置过滤器
+            // 否则可能需要创建临时模型或通知后端进行过滤
+            // showSuccessMessage(`找到 ${results.length} 个匹配的桶`, "搜索结果", 2000)
+            // 如果您的 C++ 模型支持过滤，可以这样调用：
+            if (ManagerGlobal.setBucketFilter) {
+                ManagerGlobal.setBucketFilter(searchField.text)
+            }
+        } catch (error) {
+            console.error("❌ 应用桶搜索结果时出错:", error)
+        }
+    }
+    function resetSearch() {
+        console.log("🔄 重置搜索")
+
+        try {
+            if (tableView.inBucketMode) {
+                // 重置桶搜索
+                if (ManagerGlobal.clearBucketFilter) {
+                    ManagerGlobal.clearBucketFilter()
+                } else {
+                    // 如果没有过滤方法，重新加载数据
+                    ManagerGlobal.refreshBuckets()
+                }
+            } else {
+                // 重置对象搜索
+                if (ManagerGlobal.clearObjectFilter) {
+                    ManagerGlobal.clearObjectFilter()
+                } else {
+                    // 重新加载当前路径的对象
+                    var currentPath = breadcrumbNav.getCurrentPath()
+                    if (currentPath && currentPath !== rootItem.currentBucket) {
+                        ManagerGlobal.refreshObjects(rootItem.currentBucket,
+                                                     currentPath)
+                    } else {
+                        ManagerGlobal.refreshObjects(rootItem.currentBucket)
+                    }
+                }
+            }
+
+            // 重置分页
+            resetPaginationOnFolderChange()
+        } catch (error) {
+            console.error("❌ 重置搜索时出错:", error)
+        }
+    }
+
+    onSearchRequested: function (query) {
+        performSearch(query)
+    }
+
     signal uploadRequested
     // 内部发出下载信号
     signal downloadRequested(var selectedItems)
@@ -56,11 +250,301 @@ Item {
         anchors.fill: parent
         z: 2000 // 确保在最顶层
         position: "topRight"
-        maxNotifications: 4
-        // 🔥 添加组件完成回调，确保初始化完成
+        maxNotifications: 5
+
+        Connections {
+            target: rootItem.Window.window
+
+            function onWidthChanged() {
+                // 窗口宽度变化时立即更新通知位置
+                if (notificationManager.activeNotifications.length > 0) {
+                    console.log("🪟 主窗口宽度变化，更新通知位置")
+                    Qt.callLater(function () {
+                        notificationManager.updateAllNotificationXPositions()
+                    })
+                }
+            }
+
+            function onHeightChanged() {
+                // 窗口高度变化时更新通知位置
+                if (notificationManager.activeNotifications.length > 0) {
+                    console.log("🪟 主窗口高度变化，更新通知位置")
+                    Qt.callLater(function () {
+                        notificationManager.updateAllNotificationPositions()
+                    })
+                }
+            }
+        }
+
+        // 🔥 监听自身几何变化
+        onWidthChanged: {
+            if (activeNotifications.length > 0) {
+                console.log("📱 通知管理器宽度变化:", width)
+            }
+        }
+
+        onHeightChanged: {
+            if (activeNotifications.length > 0) {
+                console.log("📱 通知管理器高度变化:", height)
+            }
+        }
+
         Component.onCompleted: {
             console.log("📢 通知管理器初始化完成")
         }
+    }
+
+    Dialog {
+        id: deleteBucketDialog
+
+        property string bucketToDelete: ""
+
+        title: "确认删除桶"
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+
+        anchors.centerIn: parent
+
+        // 🔥 调整对话框尺寸以容纳所有内容
+        width: 450
+        height: 260
+
+        background: Rectangle {
+            color: "#FFFFFF"
+            radius: 8
+            border.color: "#E0E0E0"
+            border.width: 1
+
+            // 🔥 添加阴影效果
+            layer.enabled: true
+            layer.effect: DropShadow {
+                horizontalOffset: 0
+                verticalOffset: 4
+                radius: 8
+                samples: 16
+                color: "#40000000"
+            }
+        }
+
+        contentItem: Rectangle {
+            color: "transparent"
+
+            ColumnLayout {
+                anchors {
+                    fill: parent
+                    margins: 24 // 增加边距
+                }
+                spacing: 20
+
+                // 🔥 警告图标
+                Rectangle {
+                    Layout.alignment: Qt.AlignHCenter
+                    width: 64
+                    height: 64
+                    radius: 32
+                    color: "#FEE2E2"
+                    border.color: "#FECACA"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⚠️"
+                        font.pixelSize: 32
+                    }
+
+                    SequentialAnimation on scale {
+                        running: deleteBucketDialog.visible
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: 1.0
+                            to: 1.1
+                            duration: 1000
+                            easing.type: Easing.InOutQuad
+                        }
+                        NumberAnimation {
+                            from: 1.1
+                            to: 1.0
+                            duration: 1000
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: parent.width - 48 // 确保不超出边界
+                    text: `确定要删除桶 "${deleteBucketDialog.bucketToDelete}" 吗？`
+                    font.pixelSize: 18
+                    font.weight: Font.Medium
+                    color: "#1F2937"
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    lineHeight: 1.3
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: warningText.contentHeight + 16
+                    color: "#FEF2F2"
+                    radius: 8
+                    border.color: "#FECACA"
+                    border.width: 1
+
+                    Text {
+                        id: warningText
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        text: "⚠️ 删除后将无法恢复，请确保桶内没有重要数据！"
+                        font.pixelSize: 14
+                        color: "#DC2626"
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        lineHeight: 1.4
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 10
+                }
+            }
+        }
+
+        footer: Rectangle {
+            height: 60
+            color: "#F9FAFB"
+            radius: 8
+
+            RowLayout {
+                anchors {
+                    fill: parent
+                    margins: 16
+                }
+                spacing: 12
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                // 取消按钮
+                Button {
+                    text: "取消"
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 36
+
+                    background: Rectangle {
+                        color: parent.hovered ? "#F3F4F6" : "#FFFFFF"
+                        border.color: "#D1D5DB"
+                        border.width: 1
+                        radius: 6
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#374151"
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: deleteBucketDialog.reject()
+                }
+
+                // 确认删除按钮
+                Button {
+                    text: "删除"
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 36
+
+                    background: Rectangle {
+                        color: parent.hovered ? "#DC2626" : "#EF4444"
+                        radius: 6
+
+                        // 🔥 添加按钮按下效果
+                        scale: parent.pressed ? 0.95 : 1.0
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                            }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#FFFFFF"
+                        font.pixelSize: 14
+                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: deleteBucketDialog.accept()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        // onAccepted: {
+        //     console.log("✅ 确认删除桶:", bucketToDelete)
+        //     if (bucketToDelete && bucketToDelete !== "") {
+        //         ManagerGlobal.deleteBucket(bucketToDelete)
+        //         showSuccessMessage(`桶 ${bucketToDelete} 删除请求已发送`, "删除操作", 3000)
+        //     }
+        //     bucketToDelete = ""
+        // }
+        onAccepted: {
+            console.log("✅ 确认删除桶:", bucketToDelete)
+            if (bucketToDelete && bucketToDelete !== "") {
+                // 显示删除进度
+                loadingOverlay.show("正在删除存储桶 " + bucketToDelete + "...")
+
+                ManagerGlobal.deleteBucket(bucketToDelete)
+                showSuccessMessage(`桶 ${bucketToDelete} 删除请求已发送`, "删除操作", 3000)
+            }
+            bucketToDelete = ""
+        }
+
+        onRejected: {
+            console.log("取消删除桶操作")
+            bucketToDelete = ""
+        }
+
+        enter: Transition {
+            NumberAnimation {
+                properties: "opacity,scale"
+                from: 0
+                to: 1
+                duration: 200
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                properties: "opacity,scale"
+                from: 1
+                to: 0
+                duration: 150
+                easing.type: Easing.InQuad
+            }
+        }
+    }
+
+    function showDeleteBucketConfirmation(bucketName) {
+        if (!bucketName || bucketName === "") {
+            console.error("❌ 桶名为空，无法显示删除确认对话框")
+            return
+        }
+
+        console.log("📋 显示删除确认对话框，桶名:", bucketName)
+        deleteBucketDialog.bucketToDelete = bucketName
+        deleteBucketDialog.open()
     }
 
     Connections {
@@ -103,7 +587,7 @@ Item {
 
         try {
             notificationManager.showSuccess(title || "操作成功", message,
-                                            duration || 3000)
+                                            duration || 3000, true)
             console.log("✅ 成功显示通知")
         } catch (error) {
             console.error("❌ 显示通知失败:", error)
@@ -278,19 +762,15 @@ Item {
         }
     }
 
-    // 处理上传请求
     onUploadRequested: {
         openFileUploadDialog()
     }
 
     function getCurrentPath() {
-        // 从面包屑导航获取当前路径
         if (breadcrumbNav
                 && typeof breadcrumbNav.getCurrentPath === "function") {
             return breadcrumbNav.getCurrentPath()
         }
-
-        // 如果面包屑导航不可用，返回空字符串或根路径
         return ""
     }
 
@@ -301,14 +781,11 @@ Item {
                         "qrc:/ui/Component/FileUpLoadDialog.qml")
             if (component.status === Component.Ready) {
                 fileUploadDialog = component.createObject(rootItem)
-
-                // 连接信号
                 fileUploadDialog.uploadRequested.connect(
                             function (uploadTasks) {
                                 processUploadTasks(uploadTasks)
                                 fileUploadDialog.close()
                             })
-
                 fileUploadDialog.cancelled.connect(function () {
                     fileUploadDialog.close()
                 })
@@ -317,14 +794,14 @@ Item {
                 return
             }
         }
-
         // 设置当前桶信息
         if (currentBucket) {
             fileUploadDialog.targetBucket = currentBucket
         }
-
-        // 设置当前路径
-        var currentPath = getCurrentPath()
+        // BUG 获取的路径不全的`
+        var currentPath = breadcrumbNav.getPath()
+        // 获取的路径还是最后一个
+        console.log("当前路径:", currentPath)
         if (currentPath && currentPath !== "all" && currentPath !== "") {
             fileUploadDialog.targetPath = currentPath
         }
@@ -347,10 +824,6 @@ Item {
             var task = uploadTasks[i]
             addUploadTask(task)
         }
-        // 显示上传面板
-        if (uploadPanel) {
-            uploadPanel.open()
-        }
     }
 
     // 添加上传任务到模型
@@ -358,19 +831,9 @@ Item {
         let timestamp = new Date().getTime()
         let random = Math.floor(Math.random() * 10000)
         let jobId = `upload_${timestamp}_${random}`
-
-        // if (!taskInfo.key) {
-        //     // BUG 缺少 key, 与 name 相同
-        //     console.error("上传失败: 缺少文件 key")
-        //     return
-        // }
-        // if (!taskInfo.name) {
-        //     console.error("上传失败: 缺少文件名")
-        //     return
-        // }
+        // 文件名正确
         console.log("添加上传任务:", taskInfo.fileName)
-
-        // 添加到上传模型
+        // 添加正确
         uploadModel.append({
                                "jobId": jobId,
                                "fileName": taskInfo.fileName,
@@ -383,23 +846,17 @@ Item {
                                "speed": 0,
                                "size": taskInfo.fileSize || 0
                            })
-
-        // 开始上传
         startUploadTask(jobId, taskInfo)
     }
 
     // 开始上传任务
     function startUploadTask(jobId, taskInfo) {
         console.log("开始上传任务:", jobId)
-
-        // 更新状态为上传中
         updateUploadStatus(jobId, "上传中")
-
-        // 构建远程key
-        var remoteKey = taskInfo.remotePath ? taskInfo.remotePath
+        var remoteKey = taskInfo.remotePath ? taskInfo.remotePath + '/'
                                               + taskInfo.fileName : taskInfo.fileName
-
-        // 调用后端上传方法
+        // console.log("远程上传路径:", remoteKey)
+        // 上传成功
         if (ManagerGlobal && ManagerGlobal.uploadFile) {
             ManagerGlobal.uploadFile(jobId, taskInfo.bucket, remoteKey,
                                      taskInfo.localPath)
@@ -418,7 +875,6 @@ Item {
                 if (progress !== undefined) {
                     uploadModel.setProperty(i, "progress", progress)
                 }
-
                 // 如果上传完成，移动到历史记录
                 if (status === "已完成" && transferWindow
                         && transferWindow.uploadHistoryModel) {
@@ -852,9 +1308,12 @@ Item {
         console.log("调用一次获取桶，并刷新桶")
         ManagerGlobal.refreshBuckets()
         tableView.model = ManagerGlobal.getBucketsModel()
-        paginationProxy = tableView.model
+        // paginationProxy = tableView.model
         tableView.contentY = 0
         tableView.forceLayout()
+        Qt.callLater(function () {
+            updateCompletionModel()
+        })
     }
 
     function switchToObjectsModel(bucketName) {
@@ -900,6 +1359,10 @@ Item {
             }
         })
         console.log("对象模型切换完成:", bucketName)
+
+        Qt.callLater(function () {
+            updateCompletionModel()
+        })
     }
 
     property int pageStartRow: (currentPage - 1) * currentPerPage
@@ -1099,7 +1562,6 @@ Item {
         id: loadingOverlay
         anchors.fill: parent
         z: 1000
-        // active: false
     }
 
     // 整体布局
@@ -1127,14 +1589,19 @@ Item {
                     Layout.preferredWidth: 300
                     Layout.preferredHeight: 36
                     enableCompletion: true
-
-                    color: "#FFFFFF" // 白色文字
-
+                    color: "#FFFFFF"
                     showHistoryButton: false
                     showClearButton: true
+                    completionModel: {
+                        if (tableView.inBucketMode) {
+                            return getBucketCompletionData()
+                        } else {
+                            return getFileCompletionData()
+                        }
+                    }
 
                     background: Rectangle {
-                        color: "#404040" // 深灰色背景
+                        color: "#404040"
                         opacity: 0.9
                         radius: 4
                         border.width: 0
@@ -1147,7 +1614,6 @@ Item {
                             border.width: 1
                         }
                     }
-
                     Label {
                         visible: !searchField.text && !searchField.activeFocus
                         anchors {
@@ -1164,29 +1630,44 @@ Item {
                             searchRequested(text)
                         }
                     }
+                    Timer {
+                        id: searchTimer
+                        interval: 300 // 300ms延迟
+                        repeat: false
+                        onTriggered: {
+                            if (searchField.text.length >= 1) {
+                                performSearch(searchField.text)
+                            }
+                        }
+                    }
+                    onTextChanged: {
+                        console.log("搜索框文本变化:", text, "当前模式:",
+                                    tableView.inBucketMode ? "桶模式" : "对象模式")
 
-                    // 处理补全项选择
+                        if (text.length === 0) {
+                            resetSearch()
+                        } else {
+                            // 🔥 立即更新补全数据
+                            updateCompletionModel()
+
+                            if (text.length >= 1) {
+                                // 延迟搜索
+                                searchTimer.restart()
+                            }
+                        }
+                    }
                     onCompletionItemSelected: function (value) {
                         console.log("选择了补全项:", value)
-                        searchRequested(value)
+                        performSearch(value)
                     }
-
                     onHistoryItemSelected: function (value) {
                         console.log("选择了历史记录:", value)
-                        searchRequested(value)
-
-                        // 选择对应桶对象表格
-                        var success = selectBucketByName(value)
-                        if (!success) {
-                            console.log("首次选择失败，刷新桶列表后重试...")
-                            ManagerGlobal.refreshBuckets()
-                            Qt.callLater(function () {
-                                var retrySuccess = selectBucketByName(value)
-                                if (!retrySuccess) {
-                                    console.error("重试后仍无法找到桶:", value)
-                                }
-                            })
+                        if (tableView.inBucketMode) {
+                            var success = selectBucketByName(value)
                         }
+                        // 关闭
+                        console.log("关闭搜索框")
+                        togglePopup(false);
                     }
                 }
                 // 占位符
@@ -1439,13 +1920,12 @@ Item {
 
                                 Text {
                                     text: uploadButton.text
-                                    font.pixelSize: 12 // 减小字体大小以适应按钮
+                                    font.pixelSize: 12
                                     color: "#FFFFFF"
                                     Layout.alignment: Qt.AlignVCenter
                                     Layout.fillWidth: true
-                                    // eorizontalAlignment: Text.AlignHCenter
                                     horizontalAlignment: Text.AlignHCenter
-                                    elide: Text.ElideRight // 如果文字太长则省略
+                                    elide: Text.ElideRight
                                     wrapMode: Text.NoWrap
                                 }
                             }
@@ -1454,16 +1934,13 @@ Item {
                         background: Rectangle {
                             color: uploadButton.hovered ? "#3498DB" : "#2980B9"
                             radius: 4
-                            // 确保背景完全包含内容
                             implicitWidth: uploadButton.Layout.preferredWidth
                             implicitHeight: uploadButton.Layout.preferredHeight
                         }
-
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // console.log("点击上传按钮")
                                 rootItem.uploadRequested()
                             }
                         }
@@ -1878,9 +2355,19 @@ Item {
 
                                     onClicked: function (mouse) {
                                         if (mouse.button === Qt.RightButton) {
-                                            folderContextMenu.folderData = modelData
-                                            folderContextMenu.folderIndex = index
-                                            folderContextMenu.popup()
+
+                                            // folderContextMenu.folderData = modelData
+                                            // folderContextMenu.folderIndex = index
+                                            // folderContextMenu.popup()
+                                            // if (model && model)
+                                            if (model && model.display) {
+                                                folderContextMenu.folderData = {
+                                                    "name": model.display,
+                                                    "index": index
+                                                }
+                                                folderContextMenu.folderIndex = index
+                                                folderContextMenu.popup()
+                                            }
                                         }
                                         mouse.accepted = false
                                     }
@@ -1915,29 +2402,59 @@ Item {
                                             mouse.accepted = true
                                         }
                                     }
-                                    // 添加文件夹上下文菜单
                                     TtMenu {
                                         id: folderContextMenu
                                         property var folderData: null
                                         property int folderIndex: -1
+
+                                        property string bucketName: folderData
+                                                                    && folderData.name ? folderData.name : ""
                                         MenuItem {
                                             text: qsTr("编辑")
                                             onTriggered: {
                                                 console.log("编辑文件夹:",
                                                             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
+
                                                 // 实现文件夹编辑逻辑
                                                 // TODO 修改桶名
+                                                if (folderContextMenu.bucketName === "") {
+                                                    console.error("桶名为空，无法编辑")
+                                                    return
+                                                }
+
+                                                // 修改桶名
+                                                // openBucketRenameDialog(
+                                                //             folderContextMenu.bucketName,
+                                                //             folderContextMenu.folderIndex)
                                             }
                                         }
 
                                         MenuItem {
                                             text: qsTr("删除桶")
                                             onTriggered: {
-                                                console.log("删除桶:",
-                                                            folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
-                                                ManagerGlobal.deleteBucket(
-                                                            folderContextMenu.folderData ? folderContextMenu.folderData.name : "")
-                                                console.log(folderContextMenu.folderData.name)
+                                                if (folderContextMenu.bucketName === "") {
+                                                    console.error("桶名为空，无法编辑")
+                                                    return
+                                                }
+                                                // console.log("删除桶:",
+                                                //             folderContextMenu.folderData ? folderContextMenu.folderData.name : "未知")
+                                                // ManagerGlobal.deleteBucket(
+                                                //             folderContextMenu.folderData ? folderContextMenu.folderData.name : "")
+                                                // console.log(folderContextMenu.folderData.name)
+                                                // 🔥 显示确认对话框
+                                                showDeleteBucketConfirmation(
+                                                            folderContextMenu.bucketName)
+                                            }
+                                        }
+                                        MenuSeparator {
+                                            visible: folderContextMenu.bucketName !== ""
+                                        }
+
+                                        MenuItem {
+                                            text: qsTr("刷新")
+                                            onTriggered: {
+                                                console.log("🔄 刷新桶列表")
+                                                ManagerGlobal.refreshBuckets()
                                             }
                                         }
                                     }
@@ -3386,9 +3903,7 @@ Item {
         searchField.historyModel = ManagerGlobal.getBucketNames()
         console.log("SearchField HistoryModel: ", searchField.historyModel)
 
-        // 连接上传相关信号
         ManagerGlobal.uploadProgressUpdated.connect(function (jobId, progress) {
-            // updateUploadStatus(jobId, "上传中", progress)
             console.log("更新下载进度", jobId, progress)
             if (!jobId || progress === undefined || progress === null) {
                 console.warn("下载进度更新参数无效:", jobId, progress)
@@ -3403,16 +3918,26 @@ Item {
                     uploadModel.setProperty(i, "lastUpdateTime",
                                             new Date().getTime())
                     if (progress >= 1.0) {
+                        console.log("上传完成并添加到历史模型中:", item.fileName)
                         uploadModel.setProperty(i, "status", "已完成")
-                        uploadModel.setProperty(i, "speed", "")
+                        uploadModel.setProperty(i, "speed", 0)
                         uploadHistoryModel.append({
                                                       "jobId": item.jobId,
                                                       "fileName": item.fileName,
                                                       "progress": item.progress,
                                                       "status": "已完成",
                                                       "bucket": item.bucket,
-                                                      "size": item.size || 0
+                                                      "remotePath": item.remotePath
+                                                                    || "",
+                                                      "size": item.size || 0,
+                                                      "completedTime": new Date().getTime()
                                                   })
+
+                        // 没有刷新
+                        refreshCurrentObjectsImmediately(item.bucket,
+                                                         item.remotePath)
+                        showSuccessMessage(`文件 ${item.fileName} 上传完成`,
+                                           "上传成功", 3000)
                     }
                 }
             }
@@ -3423,7 +3948,6 @@ Item {
 
             tableView.clearSelection()
 
-            // 提取目录路径
             var directoryPath = ""
             var lastSlashIndex = key.lastIndexOf("/")
 
@@ -3446,6 +3970,40 @@ Item {
         // 一开始就初始化文件历史记录
         initializeHistoryModels()
     }
+
+    function refreshCurrentObjectsImmediately(bucketName, remotePath) {
+        // 正确
+        console.log("立即刷新当前对象列表:", bucketName, "路径:", remotePath)
+        if (!bucketName || bucketName !== rootItem.currentBucket) {
+            console.log("📝 上传的桶与当前查看的桶不同，跳过刷新")
+            return
+        }
+
+        // 获取当前面包屑路径, 没有桶名, 没有 /
+        var currentPath = breadcrumbNav.getCurrentPath()
+        // remotePath 与 currentPath 相等
+        console.log("当前查看的路径:", currentPath)
+        var refreshPath = remotePath
+
+        console.log("🔄 上传完成，立即刷新对象列表:", bucketName, "路径:", refreshPath)
+
+        // 清楚, 但是没有 tableview 加载
+        tableView.clearSelection()
+        // 刷新对象列表
+        if (refreshPath && refreshPath !== bucketName) {
+            console.log("11111111111111111111刷新指定路径:", refreshPath)
+            ManagerGlobal.refreshObjects(bucketName, refreshPath)
+        } else {
+            // 在根目录下 自动创建一个文件
+            // 输出的是这里
+            console.log("----------------------------------")
+            ManagerGlobal.refreshObjects(bucketName)
+        }
+
+        // 重置分页状态
+        resetPaginationOnFolderChange()
+    }
+
     // 在 MainPage.qml 中的下载完成处理函数中添加
     // 根本没有调用
     function handleDownloadCompleted(jobId) {
