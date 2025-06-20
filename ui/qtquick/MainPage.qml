@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import QtQml.Models
-import Qt.labs.qmlmodels
 import QtQml
 import Qt5Compat.GraphicalEffects
 
@@ -53,7 +52,6 @@ Item {
         }
     }
 
-    // 🔥 获取文件补全数据
     function getFileCompletionData() {
         if (tableView.inBucketMode) {
             return []
@@ -83,7 +81,6 @@ Item {
         }
     }
 
-    // 🔥 更新补全模型
     function updateCompletionModel() {
         try {
             var newCompletions
@@ -105,8 +102,6 @@ Item {
             resetSearch()
             return
         }
-        // console.log("🔍 执行搜索:", query, "当前模式:",
-        //             tableView.inBucketMode ? "桶模式" : "对象模式")
         if (tableView.inBucketMode) {
             // 搜索桶
             searchBuckets(query)
@@ -258,7 +253,7 @@ Item {
             function onWidthChanged() {
                 // 窗口宽度变化时立即更新通知位置
                 if (notificationManager.activeNotifications.length > 0) {
-                    console.log("🪟 主窗口宽度变化，更新通知位置")
+                    // console.log("主窗口宽度变化，更新通知位置")
                     Qt.callLater(function () {
                         notificationManager.updateAllNotificationXPositions()
                     })
@@ -268,7 +263,7 @@ Item {
             function onHeightChanged() {
                 // 窗口高度变化时更新通知位置
                 if (notificationManager.activeNotifications.length > 0) {
-                    console.log("🪟 主窗口高度变化，更新通知位置")
+                    // console.log("主窗口高度变化，更新通知位置")
                     Qt.callLater(function () {
                         notificationManager.updateAllNotificationPositions()
                     })
@@ -279,18 +274,18 @@ Item {
         // 🔥 监听自身几何变化
         onWidthChanged: {
             if (activeNotifications.length > 0) {
-                console.log("📱 通知管理器宽度变化:", width)
+                // console.log("通知管理器宽度变化:", width)
             }
         }
 
         onHeightChanged: {
             if (activeNotifications.length > 0) {
-                console.log("📱 通知管理器高度变化:", height)
+                // console.log("通知管理器高度变化:", height)
             }
         }
 
         Component.onCompleted: {
-            console.log("📢 通知管理器初始化完成")
+            // console.log("通知管理器初始化完成")
         }
     }
 
@@ -305,7 +300,6 @@ Item {
 
         anchors.centerIn: parent
 
-        // 🔥 调整对话框尺寸以容纳所有内容
         width: 450
         height: 260
 
@@ -315,7 +309,6 @@ Item {
             border.color: "#E0E0E0"
             border.width: 1
 
-            // 🔥 添加阴影效果
             layer.enabled: true
             layer.effect: DropShadow {
                 horizontalOffset: 0
@@ -336,7 +329,6 @@ Item {
                 }
                 spacing: 20
 
-                // 🔥 警告图标
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     width: 64
@@ -1262,19 +1254,54 @@ Item {
             tableModel.appendRow(rows[i])
         }
     }
+    // function resetPaginationOnFolderChange() {
+    //     rootItem.currentPage = 1
+    //     tableView.clearSelection()
+    //     rootItem.currentRecordCount = updateRecordCount()
+
+    //     rootItem.pageStartRow = 0
+    //     rootItem.pageEndRow = Math.min(currentPerPage, currentRecordCount) - 1
+
+    //     pagination.totalRecords = rootItem.currentRecordCount
+    //     pagination.currentPage = 1
+    //     rootItem.updatePaginationState()
+
+    //     console.log("文件夹变更，重置分页状态：当前页=1，总记录数=", rootItem.currentRecordCount)
+    // }
     function resetPaginationOnFolderChange() {
+        console.log("🔄 文件夹变更，重置分页状态")
+
+        // 🔥 重置到第一页
         rootItem.currentPage = 1
+
+        // 🔥 清除表格选择
         tableView.clearSelection()
-        rootItem.currentRecordCount = updateRecordCount()
 
+        // 🔥 更新记录数
+        rootItem.currentRecordCount = rootItem.updateRecordCount()
+
+        // 🔥 重新计算分页范围
         rootItem.pageStartRow = 0
-        rootItem.pageEndRow = Math.min(currentPerPage, currentRecordCount) - 1
+        rootItem.pageEndRow = Math.min(rootItem.currentPerPage,
+                                       rootItem.currentRecordCount) - 1
 
-        pagination.totalRecords = rootItem.currentRecordCount
-        pagination.currentPage = 1
+        console.log("📊 重置后的分页状态:", {
+                        "currentPage": rootItem.currentPage,
+                        "currentRecordCount": rootItem.currentRecordCount,
+                        "pageStartRow": rootItem.pageStartRow,
+                        "pageEndRow": rootItem.pageEndRow
+                    })
+
+        // 🔥 同步分页组件状态
+        if (pagination) {
+            Qt.callLater(function () {
+                pagination.currentPage = 1
+                pagination.totalRecords = rootItem.currentRecordCount
+            })
+        }
+
+        // 🔥 强制刷新
         rootItem.updatePaginationState()
-
-        console.log("文件夹变更，重置分页状态：当前页=1，总记录数=", rootItem.currentRecordCount)
     }
 
     function parseDateString(dateStr) {
@@ -1364,6 +1391,22 @@ Item {
             updateCompletionModel()
         })
     }
+    onCurrentPageChanged: {
+        console.log("📄 当前页发生变化:", currentPage)
+        updatePaginationState()
+    }
+
+    // 🔥 监听每页记录数变化
+    onCurrentPerPageChanged: {
+        console.log("📝 每页记录数发生变化:", currentPerPage)
+        updatePaginationState()
+    }
+
+    // 🔥 监听总记录数变化
+    onCurrentRecordCountChanged: {
+        console.log("📊 总记录数发生变化:", currentRecordCount)
+        updatePaginationState()
+    }
 
     property int pageStartRow: (currentPage - 1) * currentPerPage
     property int pageEndRow: Math.min(pageStartRow + currentPerPage,
@@ -1378,26 +1421,73 @@ Item {
                         currentRecordCount) - 1
     }
     // 添加函数来更新分页状态
+    // function updatePaginationState() {
+    //     // 强制刷新表格布局
+    //     Qt.callLater(function () {
+    //         tableView.forceLayout()
+    //         tableView.contentY = 0
+    //     })
+    // }
     function updatePaginationState() {
-        // 强制刷新表格布局
+        console.log("🔄 更新分页状态:", {
+                        "currentPage": currentPage,
+                        "currentPerPage": currentPerPage,
+                        "currentRecordCount": currentRecordCount,
+                        "pageStartRow": pageStartRow,
+                        "pageEndRow": pageEndRow
+                    })
+
+        // 🔥 确保分页组件状态同步
+        if (pagination) {
+            Qt.callLater(function () {
+                pagination.currentPage = rootItem.currentPage
+                pagination.totalRecords = rootItem.currentRecordCount
+                pagination.rowsPerPage = rootItem.currentPerPage
+            })
+        }
+
+        // 🔥 强制刷新表格布局
         Qt.callLater(function () {
-            tableView.forceLayout()
-            tableView.contentY = 0
+            if (tableView) {
+                tableView.forceLayout()
+                tableView.contentY = 0
+            }
         })
     }
 
+    // function updateRecordCount() {
+    //     if (!tableView.model) {
+    //         return 0
+    //     }
+    //     if (typeof tableView.model.totalCount !== "undefined") {
+    //         return tableView.model.totalCount
+    //     }
+    //     if (typeof tableView.model.rowCount === "function") {
+    //         return tableView.model.rowCount()
+    //     }
+
+    //     return 0
+    // }
     function updateRecordCount() {
         if (!tableView.model) {
             return 0
         }
-        if (typeof tableView.model.totalCount !== "undefined") {
-            return tableView.model.totalCount
-        }
-        if (typeof tableView.model.rowCount === "function") {
-            return tableView.model.rowCount()
-        }
 
-        return 0
+        try {
+            var count = 0
+            if (typeof tableView.model.totalCount !== "undefined") {
+                count = tableView.model.totalCount
+            } else if (typeof tableView.model.rowCount === "function") {
+                count = tableView.model.rowCount()
+            }
+
+            console.log("📊 更新记录数:", count, "模式:",
+                        tableView.inBucketMode ? "桶模式" : "对象模式")
+            return count
+        } catch (e) {
+            console.error("❌ 更新记录数失败:", e)
+            return 0
+        }
     }
 
     function getCurrentPageRowCount() {
@@ -1667,7 +1757,7 @@ Item {
                         }
                         // 关闭
                         console.log("关闭搜索框")
-                        togglePopup(false);
+                        togglePopup(false)
                     }
                 }
                 // 占位符
@@ -1948,7 +2038,7 @@ Item {
 
                     // 下载按钮
                     Button {
-                        id: downloadButton
+                        id: downloadTitleButton
                         text: "下载"
                         Layout.preferredWidth: 70 // 固定宽度
                         Layout.preferredHeight: 50
@@ -1973,10 +2063,10 @@ Item {
                                 }
 
                                 Text {
-                                    text: downloadButton.text
+                                    text: downloadTitleButton.text
                                     font.pixelSize: 13
                                     color: "#FFFFFF"
-                                    opacity: downloadButton.enabled ? 1.0 : 0.5
+                                    opacity: downloadTitleButton.enabled ? 1.0 : 0.5
                                     Layout.alignment: Qt.AlignVCenter
                                 }
                                 Item {
@@ -1986,7 +2076,7 @@ Item {
                         }
 
                         background: Rectangle {
-                            color: downloadButton.enabled ? (downloadButton.hovered ? "#27AE60" : "#2ECC71") : "#7F8C8D"
+                            color: downloadTitleButton.enabled ? (downloadTitleButton.hovered ? "#27AE60" : "#2ECC71") : "#7F8C8D"
                             radius: 4
                         }
                         onClicked: {
@@ -2104,54 +2194,54 @@ Item {
                     //     ToolTip.text: "下载管理"
                     //     ToolTip.delay: 500
                     // }
-                    Button {
-                        id: moreButton
-                        text: "操作"
-                        Layout.preferredWidth: 70
-                        Layout.preferredHeight: 50
-                        contentItem: RowLayout {
-                            spacing: 3
-                            Text {
-                                text: moreButton.text
-                                font.pixelSize: 13
-                                color: "#FFFFFF"
-                            }
-                            Text {
-                                text: "▼"
-                                font.pixelSize: 9
-                                color: "#FFFFFF"
-                            }
-                        }
+                    // Button {
+                    //     id: moreButton
+                    //     text: "操作"
+                    //     Layout.preferredWidth: 70
+                    //     Layout.preferredHeight: 50
+                    //     contentItem: RowLayout {
+                    //         spacing: 3
+                    //         Text {
+                    //             text: moreButton.text
+                    //             font.pixelSize: 13
+                    //             color: "#FFFFFF"
+                    //         }
+                    //         Text {
+                    //             text: "▼"
+                    //             font.pixelSize: 9
+                    //             color: "#FFFFFF"
+                    //         }
+                    //     }
 
-                        background: Rectangle {
-                            color: moreButton.hovered ? "#34495E" : "#2C3E50"
-                            radius: 4
-                            border.color: "#7F8C8D"
-                            border.width: 1
-                        }
+                    //     background: Rectangle {
+                    //         color: moreButton.hovered ? "#34495E" : "#2C3E50"
+                    //         radius: 4
+                    //         border.color: "#7F8C8D"
+                    //         border.width: 1
+                    //     }
 
-                        onClicked: operationsMenu.popup()
+                    //     onClicked: operationsMenu.popup()
 
-                        TtMenu {
-                            id: operationsMenu
-                            MenuItem {
-                                text: "新建文件夹"
-                                onTriggered: console.log("新建文件夹")
-                            }
-                            MenuItem {
-                                text: "重命名"
-                                enabled: tableView.selectedItems
-                                         && tableView.selectedItems.length === 1
-                                onTriggered: console.log("重命名")
-                            }
-                            MenuItem {
-                                text: "删除"
-                                enabled: tableView.selectedItems
-                                         && tableView.selectedItems.length > 0
-                                onTriggered: console.log("删除")
-                            }
-                        }
-                    }
+                    //     TtMenu {
+                    //         id: operationsMenu
+                    //         MenuItem {
+                    //             text: "新建文件夹"
+                    //             onTriggered: console.log("新建文件夹")
+                    //         }
+                    //         MenuItem {
+                    //             text: "重命名"
+                    //             enabled: tableView.selectedItems
+                    //                      && tableView.selectedItems.length === 1
+                    //             onTriggered: console.log("重命名")
+                    //         }
+                    //         MenuItem {
+                    //             text: "删除"
+                    //             enabled: tableView.selectedItems
+                    //                      && tableView.selectedItems.length > 0
+                    //             onTriggered: console.log("删除")
+                    //         }
+                    //     }
+                    // }
                     Button {
                         id: settingsButton
                         Layout.preferredWidth: 32
@@ -2707,35 +2797,70 @@ Item {
                                     target: tableView.model
 
                                     function onDataChanged(topLeft, bottomRight, roles) {
-                                        // console.info("模型数据已更新")
+                                        console.log("📊 模型数据已更新")
                                         try {
+                                            // 🔥 更新记录数
+                                            var oldCount = rootItem.currentRecordCount
+                                            rootItem.currentRecordCount
+                                                    = rootItem.updateRecordCount()
+
+                                            console.log("📊 记录数变化:",
+                                                        oldCount, "->",
+                                                        rootItem.currentRecordCount)
+
+                                            // 🔥 如果记录数变化，可能需要调整当前页
+                                            if (oldCount !== rootItem.currentRecordCount) {
+                                                var maxPage = Math.ceil(
+                                                            rootItem.currentRecordCount
+                                                            / rootItem.currentPerPage)
+                                                if (rootItem.currentPage > maxPage
+                                                        && maxPage > 0) {
+                                                    console.log("⚠️ 当前页超出范围，调整到最后一页:",
+                                                                maxPage)
+                                                    rootItem.currentPage = maxPage
+                                                }
+                                            }
+
+                                            // 🔥 强制刷新布局
                                             tableView.forceLayout()
-                                            // 更新记录数
-                                            rootItem.updateRecordCount()
                                         } catch (e) {
-                                            console.error("更新视图失败:", e)
-                                        }
-                                        const oldCount = rootItem.currentRecordCount
-                                        rootItem.currentRecordCount = updateRecordCount()
-                                        if (oldCount !== rootItem.currentRecordCount) {
-                                            console.log("记录数已变化，更新分页状态")
-                                            updatePaginationState()
+                                            console.error("❌ 处理数据变化失败:", e)
                                         }
                                     }
+
+                                    // function onModelReset() {
+                                    //     // console.log("模型重置")
+                                    //     rootItem.currentRecordCount = updateRecordCount()
+                                    //     updatePaginationState()
+                                    // }
                                     function onModelReset() {
-                                        // console.log("模型重置")
-                                        rootItem.currentRecordCount = updateRecordCount()
-                                        updatePaginationState()
+                                        console.log("🔄 模型重置")
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
+
+                                        // 🔥 重置到第一页
+                                        rootItem.currentPage = 1
+
+                                        rootItem.updatePaginationState()
                                     }
 
-                                    function onRowsInserted() {
-                                        // console.log("行被插入")
-                                        rootItem.updateRecordCount() // 更新记录数
+                                    function onRowsInserted(parent, first, last) {
+                                        console.log("➕ 行被插入:", first, "到", last)
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
                                     }
 
-                                    function onRowsRemoved() {
-                                        rootItem.updateRecordCount() // 更新记录数
+                                    function onRowsRemoved(parent, first, last) {
+                                        console.log("➖ 行被移除:", first, "到", last)
+                                        rootItem.currentRecordCount = rootItem.updateRecordCount()
                                     }
+
+                                    // function onRowsInserted() {
+                                    //     // console.log("行被插入")
+                                    //     rootItem.updateRecordCount() // 更新记录数
+                                    // }
+
+                                    // function onRowsRemoved() {
+                                    //     rootItem.updateRecordCount() // 更新记录数
+                                    // }
                                 }
                                 function sortByColumn(column, ascending) {
                                     let rows = []
@@ -2857,661 +2982,1385 @@ Item {
                                             && row <= rootItem.getPageEndRow()
                                 }
                                 property var selectedItems: []
-                                delegate: DelegateChooser {
-                                    // 基于列号的委托
-                                    role: "column"
-                                    // 对象名称
-                                    DelegateChoice {
-                                        column: 0
-                                        delegate: Rectangle {
-                                            id: nameCell
-                                            width: tableView.columnWidthProvider(
-                                                       0)
-                                            implicitWidth: tableView.columnWidthProvider(
-                                                               0)
-                                            property bool isEditing: tableView.editingRow === row
-                                                                     && tableView.editingColumn
-                                                                     === 1
-                                            // 行范围检查函数
-                                            visible: tableView.isValidRow(row)
-                                            // 添加动态属性，使用函数而不是绑定表达式，确保每次访问都重新计算
-                                            function isFolderType() {
-                                                try {
-                                                    // 获取当前行数据
-                                                    // const rowData = tableView.adapterModel ? tableView.adapterModel.getRow(row) : null
-                                                    // 拿到索引
-                                                    var idx = tableView.model.index(
-                                                                row, 0)
-                                                    // BUG 索引也是不对的
-                                                    if (idx && idx.isValid) {
-                                                        // 2) 用 Qt.UserRole 取出 C++ 那个 QVariantMap
-                                                        console.log("正常的索引")
-                                                        var userData = tableView.model.data(
-                                                                    idx,
-                                                                    Qt.UserRole)
-                                                        if (userData
-                                                                && userData.isFolder
-                                                                !== undefined) {
-                                                            return userData.isFolder // 一定要 return
-                                                        }
-                                                    } else {
+                                // delegate: DelegateChooser {
+                                //     // 基于列号的委托
+                                //     role: "column"
+                                //     // 对象名称
+                                //     DelegateChoice {
+                                //         column: 0
+                                //         delegate: Rectangle {
+                                //             id: nameCell
+                                //             width: tableView.columnWidthProvider(
+                                //                        0)
+                                //             implicitWidth: tableView.columnWidthProvider(
+                                //                                0)
+                                //             property bool isEditing: tableView.editingRow === row
+                                //                                      && tableView.editingColumn
+                                //                                      === 1
+                                //             // 行范围检查函数
+                                //             visible: tableView.isValidRow(row)
+                                //             // 添加动态属性，使用函数而不是绑定表达式，确保每次访问都重新计算
+                                //             function isFolderType() {
+                                //                 try {
+                                //                     // 获取当前行数据
+                                //                     // const rowData = tableView.adapterModel ? tableView.adapterModel.getRow(row) : null
+                                //                     // 拿到索引
+                                //                     var idx = tableView.model.index(
+                                //                                 row, 0)
+                                //                     // BUG 索引也是不对的
+                                //                     if (idx && idx.isValid) {
+                                //                         // 2) 用 Qt.UserRole 取出 C++ 那个 QVariantMap
+                                //                         console.log("正常的索引")
+                                //                         var userData = tableView.model.data(
+                                //                                     idx,
+                                //                                     Qt.UserRole)
+                                //                         if (userData
+                                //                                 && userData.isFolder
+                                //                                 !== undefined) {
+                                //                             return userData.isFolder // 一定要 return
+                                //                         }
+                                //                     } else {
 
-                                                        // 这里也会输出
-                                                        // console.log("获取不正常的索引")
-                                                    }
+                                //                         // 这里也会输出
+                                //                         // console.log("获取不正常的索引")
+                                //                     }
 
-                                                    // 3) 回退：文件名末尾带斜杠就当作文件夹
-                                                    var name = model.display
-                                                            || ""
-                                                    return name.endsWith("/")
-                                                } catch (e) {
-                                                    console.error("判断文件夹错误:", e)
-                                                    return false
+                                //                     // 3) 回退：文件名末尾带斜杠就当作文件夹
+                                //                     var name = model.display
+                                //                             || ""
+                                //                     return name.endsWith("/")
+                                //                 } catch (e) {
+                                //                     console.error("判断文件夹错误:", e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     // 使用直接的 row 标识符而不依赖于 tableModel
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+                                //             implicitHeight: 50
+                                //             RowLayout {
+                                //                 anchors {
+                                //                     fill: parent
+                                //                     leftMargin: 8
+                                //                     rightMargin: 8
+                                //                 }
+                                //                 spacing: 8
+                                //                 Text {
+                                //                     id: fileIcon
+                                //                     text: {
+                                //                         if (tableView.inBucketMode) {
+                                //                             return "🪣"
+                                //                         } else {
+                                //                             return nameCell.isFolderType(
+                                //                                         ) ? "📁" : "📄"
+                                //                         }
+                                //                     }
+                                //                     font.pixelSize: 18
+                                //                     color: {
+                                //                         if (tableView.inBucketMode) {
+                                //                             return "#1E88E5" // 桶图标颜色
+                                //                         } else {
+                                //                             return nameCell.isFolderType(
+                                //                                         ) ? "#2980B9" : "#333333"
+                                //                         }
+                                //                     }
+                                //                     Layout.preferredWidth: 24
+                                //                 }
+                                //                 Text {
+                                //                     id: cellText
+                                //                     Layout.fillWidth: true
+                                //                     text: {
+                                //                         let name = model.display
+                                //                             || "未命名"
+                                //                         return nameCell.isFolderType()
+                                //                                 && name.endsWith(
+                                //                                     '/') ? name.substring(0, name.length - 1) : name
+                                //                     }
+                                //                     elide: Text.ElideRight
+                                //                     visible: !nameCell.isEditing
+                                //                     color: nameCell.isFolderType(
+                                //                                ) ? "#2980B9" : "#333333"
+                                //                     font.bold: nameCell.isFolderType()
+                                //                     font.underline: nameCell.isFolderType()
+                                //                 }
+                                //                 // 添加模型变更监听
+                                //                 Component.onCompleted: {
+
+                                //                 }
+                                //             }
+                                //             // 处理点击事件
+                                //             MouseArea {
+                                //                 id: mouseArea
+                                //                 anchors.fill: parent
+                                //                 hoverEnabled: true
+                                //                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                //                 cursorShape: Qt.PointingHandCursor
+                                //                 propagateComposedEvents: !nameCell.isEditing
+                                //                 property var root: rootItem
+                                //                 onClicked: function (mouse) {
+                                //                     console.log("Clicked on row",
+                                //                                 row)
+                                //                     try {
+                                //                         // 如果当前是桶模型模式，点击处理不同
+                                //                         if (tableView.inBucketMode) {
+                                //                             if (mouse.button === Qt.LeftButton) {
+                                //                                 // 获取桶名
+                                //                                 const bucketName = model.display
+                                //                                 // 普通点击只是选择，不导航
+                                //                                 tableView.clearSelection()
+                                //                             } else if (mouse.button
+                                //                                        === Qt.RightButton) {
+                                //                                 bucketContextMenu.bucketName
+                                //                                         = model.display
+                                //                                 bucketContextMenu.rowIndex = row
+                                //                                 bucketContextMenu.popup()
+                                //                             }
+                                //                         } else {
+                                //                             const isFolder = nameCell.isFolderType()
+                                //                             // 这里保存对应的行信息
+                                //                             if (mouse.button === Qt.LeftButton) {
+                                //                                 // 左键点击
+                                //                                 if (mouse.modifiers
+                                //                                         & Qt.ControlModifier) {
+                                //                                     // 构建行信息
+                                //                                     const rowData = {
+                                //                                         "id": "obj" + row,
+                                //                                         "name": display
+                                //                                     }
+                                //                                     // 从模型中获取 UserRole 数据
+                                //                                     // 这里获取的 idx 是有效的 ???
+                                //                                     var idx = tableView.model.index(
+                                //                                                 row, 0)
+                                //                                     if (idx && idx.valid) {
+                                //                                         console.log("有效的 idx")
+                                //                                         var userData = tableView.model.data(idx, Qt.UserRole)
+                                //                                         if (userData) {
+                                //                                             // 添加下载所需的关键信息
+                                //                                             rowData.key = userData.key || ""
+                                //                                             rowData.size = userData.size || 0
+                                //                                             rowData.isFolder = userData.isFolder || false
+                                //                                             rowData.lastModified = userData.lastModified || ""
+                                //                                         }
+                                //                                     }
+                                //                                     // 上面是无效的
+                                //                                     // 如果没有获取到 key，使用 name 作为备选
+                                //                                     if (!rowData.key) {
+                                //                                         rowData.key = rowData.name
+                                //                                     }
+                                //                                     // 获取的 key 是完整路径
+                                //                                     console.log("Ctrl+点击选择项目:",
+                                //                                                 rowData.name,
+                                //                                                 "key:",
+                                //                                                 rowData.key,
+                                //                                                 "size:",
+                                //                                                 rowData.size)
+                                //                                     // 添加的数据
+                                //                                     tableView.toggleSelection(
+                                //                                                 rowData)
+                                //                                 } else {
+                                //                                     // 普通点击: 单选
+                                //                                     tableView.clearSelection()
+                                //                                 }
+                                //                             } else if (mouse.button
+                                //                                        === Qt.RightButton) {
+                                //                                 // 右键菜单
+                                //                                 // 出现问题, 唯有 isFolder 属性
+                                //                                 const rowData = {
+                                //                                     "id": "obj" + row,
+                                //                                     "name": display
+                                //                                             || ""
+                                //                                 }
+                                //                                 var idx = tableView.model.index(
+                                //                                             row,
+                                //                                             0)
+                                //                                 if (idx && idx.valid) {
+                                //                                     console.log("有效的 idx")
+                                //                                     var userData = tableView.model.data(idx, Qt.UserRole)
+                                //                                     if (userData) {
+                                //                                         // 添加下载所需的关键信息
+                                //                                         rowData.key = userData.key
+                                //                                                 || ""
+                                //                                         // rowData.size = userData.size
+                                //                                         // || 0
+                                //                                         // rowData.isFolder = userData.isFolder || false
+                                //                                         // rowData.lastModified = userData.lastModified || ""
+                                //                                     }
+                                //                                 }
+                                //                                 // 上面是无效的
+                                //                                 // 如果没有获取到 key，使用 name 作为备选
+                                //                                 if (!rowData.key) {
+                                //                                     rowData.key = rowData.name
+                                //                                 }
+
+                                //                                 // 获取的 key 是完整路径
+                                //                                 // 完整的 key
+                                //                                 // console.log("Ctrl+点击选择项目:",
+                                //                                 //             rowData.name,
+                                //                                 //             "key:",
+                                //                                 //             rowData.key,
+                                //                                 //             "size:",
+                                //                                 //             rowData.size)
+                                //                                 if (!tableView.isItemSelected(
+                                //                                             rowData.id)) {
+                                //                                     // 当前不是选中的状态
+                                //                                     tableView.clearSelection()
+                                //                                     tableView.toggleSelection(
+                                //                                                 rowData)
+                                //                                 }
+                                //                                 // 准备上下文菜单数据
+                                //                                 contextMenu.rowData = rowData
+                                //                                 // 缺少属性
+                                //                                 contextMenu.rowIndex = row
+                                //                                 contextMenu.popup()
+                                //                             }
+                                //                         }
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "处理点击事件时出错:",
+                                //                                     e)
+                                //                     }
+                                //                 }
+                                //                 onDoubleClicked: function (mouse) {
+                                //                     if (mouse.button === Qt.LeftButton) {
+                                //                         if (tableView.inBucketMode) {
+                                //                             console.log("打开桶列表: ",
+                                //                                         model.display)
+                                //                             currentBucket = model.display
+                                //                             handleOpenBucket(
+                                //                                         currentBucket)
+                                //                             return
+                                //                         }
+                                //                         const isFolder = nameCell.isFolderType()
+                                //                         if (!isFolder) {
+                                //                             console.log("双击的不是文件夹, 忽略操作")
+                                //                             return
+                                //                         }
+                                //                         var rowData = {
+                                //                             "id": "obj" + row,
+                                //                             "name": display
+                                //                                     || ""
+                                //                         }
+                                //                         if (!rowData) {
+                                //                             console.error(
+                                //                                         "无法获取行数据:",
+                                //                                         row)
+                                //                             return
+                                //                         }
+                                //                         var currentObjectModel = tableView.model
+                                //                         var indexCol0 = currentObjectModel.index(
+                                //                                     row, 0)
+                                //                         if (indexCol0
+                                //                                 && indexCol0.valid) {
+                                //                             // 名字
+                                //                             var userRoleDataMap = currentObjectModel.data(
+                                //                                         indexCol0,
+                                //                                         Qt.UserRole)
+                                //                             if (userRoleDataMap) {
+                                //                                 rowData.isFolder
+                                //                                         = userRoleDataMap.isFolder
+                                //                                 rowData.key = userRoleDataMap.key
+                                //                                 rowData.size = userRoleDataMap.size
+                                //                                 rowData.date = userRoleDataMap.lastModified
+                                //                             } else {
+                                //                                 console.warn(
+                                //                                             "UserRole data missing for row:",
+                                //                                             row,
+                                //                                             "name:",
+                                //                                             rowData.name)
+                                //                                 rowData.isFolder
+                                //                                         = (rowData.name
+                                //                                            && rowData.name.endsWith(
+                                //                                                '/'))
+                                //                                 rowData.key = rowData.name
+
+                                //                                 var indexCol1 = currentObjectModel.index(
+                                //                                             row,
+                                //                                             1)
+                                //                                 if (indexCol1
+                                //                                         && indexCol1.valid)
+                                //                                     rowData.size = currentObjectModel.data(indexCol1, Qt.DisplayRole)
+
+                                //                                 var indexCol2 = currentObjectModel.index(
+                                //                                             row,
+                                //                                             2)
+                                //                                 if (indexCol2
+                                //                                         && indexCol2.valid)
+                                //                                     rowData.date = currentObjectModel.data(indexCol2, Qt.DisplayRole)
+                                //                             }
+                                //                         } else {
+                                //                             console.error(
+                                //                                         "双击处理：无法获取行 ",
+                                //                                         row,
+                                //                                         " 的有效索引。")
+                                //                             return
+                                //                         }
+                                //                         if (rowData.isFolder !== isFolder) {
+                                //                             console.warn("双击处理：rowData.isFolder (" + rowData.isFolder + ") 与 nameCell.isFolderType() (" + isFolder + ") 不一致。 UserRole/derived data is used for rowData.")
+                                //                         }
+
+                                //                         console.log("打开文件夹:",
+                                //                                     rowData.name,
+                                //                                     "(Key:",
+                                //                                     rowData.key,
+                                //                                     "IsFolder:",
+                                //                                     rowData.isFolder,
+                                //                                     ")")
+
+                                //                         const keyToNavigate = rowData.key
+                                //                                             || (rowData.name && rowData.name.endsWith('/') ? rowData.name : rowData.name + '/')
+
+                                //                         ManagerGlobal.refreshObjects(
+                                //                                     currentBucket,
+                                //                                     keyToNavigate)
+
+                                //                         console.log("记录数: ",
+                                //                                     currentObjectModel.rowCount(
+                                //                                         ))
+
+                                //                         const displayName = rowData.name.endsWith('/') ? rowData.name.substring(0, rowData.name.length - 1) : rowData.name
+                                //                         console.log("双击打开文件夹和路径:",
+                                //                                     keyToNavigate,
+                                //                                     displayName)
+                                //                         breadcrumbNav.addPathItem(
+                                //                                     keyToNavigate,
+                                //                                     displayName)
+                                //                         resetPaginationOnFolderChange()
+                                //                     }
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                //     // 文件大小
+                                //     DelegateChoice {
+                                //         column: 1
+                                //         delegate: Rectangle {
+                                //             visible: tableView.isValidRow(row)
+                                //             implicitHeight: 50
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+
+                                //             Text {
+                                //                 anchors {
+                                //                     verticalCenter: parent.verticalCenter
+                                //                 }
+                                //                 text: display || ""
+                                //                 color: "#555555"
+                                //                 elide: Text.ElideRight
+                                //                 width: parent.width - 16
+                                //             }
+                                //             // 添加行选择效果
+                                //             MouseArea {
+                                //                 anchors.fill: parent
+                                //                 onClicked: {
+                                //                     console.log("Current Row",
+                                //                                 row)
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                //     // 日期
+                                //     DelegateChoice {
+                                //         column: 2
+                                //         delegate: Rectangle {
+                                //             // 仅在行有效时显示
+                                //             visible: tableView.isValidRow(row)
+                                //             property bool isItemSelected: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return false
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj" + row)
+                                //                 } catch (e) {
+                                //                     console.error(
+                                //                                 "Error checking selection:",
+                                //                                 e)
+                                //                     return false
+                                //                 }
+                                //             }
+                                //             color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
+                                //             implicitHeight: 50
+                                //             Text {
+                                //                 anchors {
+                                //                     verticalCenter: parent.verticalCenter
+                                //                 }
+                                //                 text: display || ""
+                                //                 color: "#555555"
+                                //                 elide: Text.ElideRight
+                                //                 width: parent.width - 16
+                                //             }
+                                //         }
+                                //     }
+                                //     DelegateChoice {
+                                //         column: 3 // 操作列
+                                //         delegate: Rectangle {
+                                //             id: operationCell
+                                //             visible: tableView.isValidRow(row)
+                                //                      && !tableView.inBucketMode
+                                //             implicitHeight: 50
+                                //             color: {
+                                //                 try {
+                                //                     if (!tableView.selectedItems)
+                                //                         return "#FFFFFF"
+                                //                     return tableView.selectedItems.some(
+                                //                                 item => item.id === "obj"
+                                //                                 + row) ? "#E3F2FD" : "#FFFFFF"
+                                //                 } catch (e) {
+                                //                     return "#FFFFFF"
+                                //                 }
+                                //             }
+                                //             Button {
+                                //                 id: modernDownloadButton
+                                //                 anchors.centerIn: parent
+                                //                 width: 70
+                                //                 Layout.preferredHeight: 28 // 设定固定高度, 会影响表格的行高
+                                //                 visible: {
+                                //                     // 之前第一次进入是无效的, 但是后面获取数据时，就会变得有效
+                                //                     // 构造的时候缺少数据, 访问 undefined, 这是 qml 的什么机制 ???
+                                //                     // 基本条件检查
+                                //                     if (tableView.inBucketMode) {
+                                //                         return false
+                                //                     }
+
+                                //                     if (!model) {
+                                //                         return false
+                                //                     }
+
+                                //                     // 获取文件名
+                                //                     var fileName = ""
+                                //                     try {
+                                //                         fileName = model.display
+                                //                                 || ""
+                                //                     } catch (e) {
+                                //                         return false
+                                //                     }
+
+                                //                     if (!fileName) {
+                                //                         return false
+                                //                     }
+
+                                //                     // 简单判断：文件夹以 / 结尾
+                                //                     return !fileName.endsWith(
+                                //                                 "/")
+                                //                 }
+                                //                 function updateVisibility() {
+                                //                     try {
+                                //                         if (tableView.inBucketMode) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         // 检查模型数据是否有效
+                                //                         if (!model
+                                //                                 || model.display === undefined) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         var fileName = model.display
+                                //                                 || ""
+                                //                         if (!fileName) {
+                                //                             visible = false
+                                //                             return
+                                //                         }
+
+                                //                         // 尝试从模型获取更详细的信息
+                                //                         var idx = tableView.model.index(
+                                //                                     row, 0)
+                                //                         if (idx && idx.isValid) {
+                                //                             var userData = tableView.model.data(
+                                //                                         idx,
+                                //                                         Qt.UserRole)
+                                //                             if (userData
+                                //                                     && userData.isFolder
+                                //                                     !== undefined) {
+                                //                                 visible = !userData.isFolder
+                                //                                 return
+                                //                             }
+                                //                         }
+
+                                //                         var isFolder = fileName.endsWith(
+                                //                                     "/")
+                                //                         visible = !isFolder
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "updateVisibility 出错:",
+                                //                                     e)
+                                //                         visible = false
+                                //                     }
+                                //                 }
+
+                                //                 background: Rectangle {
+                                //                     radius: 6
+                                //                     color: parent.hovered ? "#EFF6FF" : "#F0F9FF"
+                                //                     border.color: parent.hovered ? "#3B82F6" : "transparent"
+                                //                     border.width: parent.hovered ? 1 : 0
+                                //                     layer.enabled: true
+                                //                     layer.effect: DropShadow {
+                                //                         horizontalOffset: 0
+                                //                         verticalOffset: 1
+                                //                         radius: 3
+                                //                         samples: 6
+                                //                         color: "#20000000"
+                                //                     }
+                                //                 }
+                                //                 contentItem: RowLayout {
+                                //                     anchors.centerIn: parent
+                                //                     spacing: 4
+
+                                //                     Text {
+                                //                         text: "⬇"
+                                //                         font.pixelSize: 12
+                                //                         color: "#1D4ED8"
+                                //                         Layout.alignment: Qt.AlignVCenter
+                                //                     }
+
+                                //                     Text {
+                                //                         text: "下载"
+                                //                         font.pixelSize: 10
+                                //                         font.weight: Font.Medium
+                                //                         color: "#1D4ED8"
+                                //                         Layout.alignment: Qt.AlignVCenter
+                                //                         elide: Text.ElideRight
+                                //                     }
+                                //                 }
+                                //                 onClicked: {
+                                //                     try {
+                                //                         if (!tableView.model) {
+                                //                             console.error(
+                                //                                         "表格模型无效")
+                                //                             return
+                                //                         }
+                                //                         const totalRows = tableView.model.rowCount()
+                                //                         // 4. 验证行是否在当前分页范围内（使用显示行索引）
+                                //                         if (!tableView.isValidRow(
+                                //                                     row)) {
+                                //                             console.error(
+                                //                                         "行不在当前分页范围内:",
+                                //                                         row)
+                                //                             return
+                                //                         }
+                                //                         var fileInfo = {
+                                //                             "id": "obj" + row,
+                                //                             "name": model.display
+                                //                                     || "未知文件"
+                                //                         }
+                                //                         // 设置正确, 但是这里获取的是 行号, 而非 data 值
+                                //                         // 永远是 2 ???
+                                //                         // console.log("get the name: ",
+                                //                         //             fileInfo.name)
+                                //                         // 获取该行的有效数据
+                                //                         var idx = tableView.model.index(
+                                //                                     row, 0)
+                                //                         if (idx || idx.isValid) {
+                                //                             // fileInfo.name = tableView.model.data(
+                                //                             //             idx,
+                                //                             //             Qt.DisplayRole)
+                                //                             // // 读取的名字是正确的
+                                //                             // console.log("主动读取 display role: ",
+                                //                             //             fileInfo.name)
+
+                                //                             // }
+                                //                             var userData = tableView.model.data(
+                                //                                         idx,
+                                //                                         Qt.UserRole)
+                                //                             if (userData) {
+                                //                                 fileInfo.key = userData.key
+                                //                                         || ""
+                                //                                 fileInfo.size = userData.size
+                                //                                         || 0
+                                //                                 fileInfo.isFolder
+                                //                                         = userData.isFolder
+                                //                                         || false
+                                //                                 fileInfo.lastModified
+                                //                                         = userData.lastModified
+                                //                                         || ""
+                                //                             } else {
+                                //                                 console.warn(
+                                //                                             "UserRole 数据无效，使用默认值:",
+                                //                                             fileInfo)
+                                //                             }
+                                //                         }
+                                //                         // name 是名字, key 是路径加+名字
+                                //                         console.log("点击下载按钮选择项目:",
+                                //                                     fileInfo.name,
+                                //                                     "key:",
+                                //                                     fileInfo.key,
+                                //                                     "size:",
+                                //                                     fileInfo.size)
+                                //                         rootItem.addDownloadTask(
+                                //                                     fileInfo)
+                                //                         // downloadPanel.open()
+                                //                     } catch (e) {
+                                //                         console.error(
+                                //                                     "下载处理错误:",
+                                //                                     e)
+                                //                     }
+                                //                 }
+                                //                 TtToolTip {
+                                //                     text: qsTr("打开文件位置")
+                                //                     visible: parent.hovered
+                                //                     delay: 500
+                                //                     arrowPosition: "auto"
+                                //                 }
+                                //                 scale: hovered ? 1.05 : 1.0
+                                //                 Behavior on scale {
+                                //                     NumberAnimation {
+                                //                         duration: 100
+                                //                     }
+                                //                 }
+                                //             }
+                                //         }
+                                //     }
+                                delegate: Rectangle {
+                                    id: cellContainer
+
+                                    // 基本属性
+                                    implicitWidth: tableView.columnWidthProvider(
+                                                       column) || 100
+                                    implicitHeight: 50
+                                    visible: tableView.isValidRow(row)
+
+                                    // 选中状态计算
+                                    property bool isItemSelected: {
+                                        try {
+                                            if (!tableView.selectedItems)
+                                                return false
+                                            return tableView.selectedItems.some(
+                                                        item => item.id === "obj" + row)
+                                        } catch (e) {
+                                            return false
+                                        }
+                                    }
+
+                                    // 背景色
+                                    color: {
+                                        if (isItemSelected) {
+                                            return "#E3F2FD" // 选中时的蓝色背景
+                                        } else if (cellMouseArea.containsMouse) {
+                                            return "#F5F5F5" // 鼠标悬停时的浅灰色
+                                        } else {
+                                            return "#FFFFFF" // 🔥 统一使用白色背景，取消奇偶行颜色差异
+                                        }
+                                    }
+
+                                    border.color: "#E9ECEF"
+                                    border.width: 0.5
+
+                                    function isFolderType() {
+                                        try {
+                                            if (tableView.inBucketMode) {
+                                                return false
+                                            }
+                                            // 拿到索引
+                                            // var idx = tableView.model.index(
+                                            //             row, 0)
+                                            // 永远获取不到
+                                            // if (idx && idx.isValid) {
+                                            //     // 2) 用 Qt.UserRole 取出 C++ 那个 QVariantMap
+                                            //     console.log("正常的索引")
+                                            //     var userData = tableView.model.data(
+                                            //                 idx, Qt.UserRole)
+                                            //     if (userData
+                                            //             && userData.isFolder !== undefined) {
+                                            //         return userData.isFolder // 一定要 return
+                                            //     }
+                                            // } else {
+                                            //     // 这里也会输出
+                                            //     // 输出
+                                            //     console.log("获取不正常的索引")
+                                            // }
+
+                                            // 3) 回退：文件名末尾带斜杠就当作文件夹
+                                            var name = model.display || ""
+                                            return name.endsWith("/")
+                                        } catch (e) {
+                                            console.error("判断文件夹错误:", e)
+                                            return false
+                                        }
+                                    }
+                                    // function isFolderType() {
+                                    //     try {
+                                    //         if (tableView.inBucketMode) {
+                                    //             return false // 桶模式下不存在文件夹概念
+                                    //         }
+                                    //         // 这个方法, 图标有效, 按钮无效
+                                    //         // 🔥 优先使用 UserRole 数据
+                                    //         // 以下这个有延迟性 bug
+                                    //         // var idx = tableView.model.index(
+                                    //         //             row, 0)
+                                    //         // if (idx && idx.valid) {
+                                    //         //     var userData = tableView.model.data(
+                                    //         //                 idx, Qt.UserRole)
+                                    //         //     if (userData
+                                    //         //             && typeof userData.isFolder === 'boolean') {
+                                    //         //         // 能够获取到
+                                    //         //         // console.log("从 UserRole 获取 isFolder:",
+                                    //         //         //             userData.isFolder,
+                                    //         //         //             "文件:",
+                                    //         //         //             model.display)
+                                    //         //         return userData.isFolder
+                                    //         //     }
+                                    //         // }
+
+                                    //         // 🔥 备用方案：检查文件名是否以 / 结尾
+                                    //         var name = model.display || ""
+                                    //         var isFolder = name.endsWith("/")
+                                    //         // console.log("备用判断 isFolder:",
+                                    //         //             isFolder, "文件:", name)
+                                    //         return isFolder
+                                    //     } catch (e) {
+                                    //         // console.error("判断文件夹类型出错:", e)
+                                    //         // 🔥 出错时也要检查文件名
+                                    //         var name = model.display || ""
+                                    //         return name.endsWith("/")
+                                    //     }
+                                    // }
+                                    // function isFolderType() {
+                                    //     try {
+                                    //         if (tableView.inBucketMode) {
+                                    //             return false
+                                    //         }
+
+                                    //         // 🔥 首先检查基本数据是否有效
+                                    //         var fileName = ""
+                                    //         if (model
+                                    //                 && model.display !== undefined) {
+                                    //             fileName = model.display || ""
+                                    //         } else {
+                                    //             // 模型数据无效，返回 false
+                                    //             return false
+                                    //         }
+
+                                    //         // 🔥 如果文件名为空，直接返回 false
+                                    //         if (!fileName || fileName === "") {
+                                    //             return false
+                                    //         }
+
+                                    //         // 🔥 尝试从 UserRole 获取准确数据
+                                    //         try {
+                                    //             var idx = tableView.model.index(
+                                    //                         row, 0)
+                                    //             if (idx && idx.valid) {
+                                    //                 var userData = tableView.model.data(
+                                    //                             idx,
+                                    //                             Qt.UserRole)
+                                    //                 if (userData
+                                    //                         && typeof userData.isFolder
+                                    //                         === 'boolean') {
+                                    //                     console.log("✅ 从 UserRole 获取 isFolder:",
+                                    //                                 userData.isFolder,
+                                    //                                 "文件:",
+                                    //                                 fileName)
+                                    //                     return userData.isFolder
+                                    //                 }
+                                    //             }
+                                    //         } catch (userRoleError) {
+                                    //             console.log("⚠️ UserRole 获取失败，使用备用方案:",
+                                    //                         userRoleError)
+                                    //         }
+
+                                    //         // 🔥 备用方案：文件名判断
+                                    //         var isFolder = fileName.endsWith(
+                                    //                     "/")
+                                    //         console.log("🔄 备用判断 isFolder:",
+                                    //                     isFolder, "文件:",
+                                    //                     fileName)
+                                    //         return isFolder
+                                    //     } catch (e) {
+                                    //         console.error("❌ 判断文件夹类型出错:", e)
+                                    //         return false
+                                    //     }
+                                    // }
+
+                                    // 🔥 监听模型数据变化，更新文件夹状态
+                                    // Connections {
+                                    //     target: tableView.model
+                                    //     function onDataChanged() {
+                                    //         cellContainer.isFolder = cellContainer.isFolderType()
+                                    //     }
+                                    // }
+                                    Connections {
+                                        target: tableView.model
+
+                                        // function onDataChanged(topLeft, bottomRight, roles) {
+                                        //     console.log("🔄 模型数据变化，行:", row,
+                                        //                 "重新计算文件夹状态")
+                                        //     // 强制重新计算 isFolder
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+
+                                        // function onModelReset() {
+                                        //     console.log("🔄 模型重置，行:", row,
+                                        //                 "重新计算文件夹状态")
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+
+                                        // function onRowsRemoved(parent, first, last) {
+                                        //     console.log("🔄 行被删除:", first, "到",
+                                        //                 last, "当前行:", row)
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+
+                                        // function onRowsInserted(parent, first, last) {
+                                        //     console.log("🔄 行被插入:", first, "到",
+                                        //                 last, "当前行:", row)
+                                        //     Qt.callLater(function () {
+                                        //         cellContainer.isFolderChanged()
+                                        //     })
+                                        // }
+                                    }
+                                    // 缓存方案
+                                    property bool isFolder: isFolderType()
+                                    // function getCurrentFolderState() {
+                                    //     return isFolderType()
+                                    // }
+
+                                    // 动态计算全是错误的
+                                    // property bool isFolder: {
+                                    //     // 动态计算
+                                    //     return isFolderType()
+                                    // }
+                                    MouseArea {
+                                        id: cellMouseArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        property bool clickOnButton: false
+
+                                        onPressed: function (mouse) {
+                                            clickOnButton = false
+
+                                            // 检查是否点击在下载按钮区域
+                                            if (column === 3
+                                                    && !tableView.inBucketMode
+                                                    && downloadButton.visible) {
+                                                var buttonRect = Qt.rect(
+                                                            downloadButton.x,
+                                                            downloadButton.y,
+                                                            downloadButton.width,
+                                                            downloadButton.height)
+                                                if (buttonRect.contains(
+                                                            Qt.point(
+                                                                mouse.x,
+                                                                mouse.y))) {
+                                                    clickOnButton = true
+                                                    mouse.accepted = false
+                                                    return
                                                 }
                                             }
-                                            property bool isItemSelected: {
-                                                try {
-                                                    if (!tableView.selectedItems)
-                                                        return false
-                                                    // 使用直接的 row 标识符而不依赖于 tableModel
-                                                    return tableView.selectedItems.some(
-                                                                item => item.id === "obj" + row)
-                                                } catch (e) {
-                                                    console.error(
-                                                                "Error checking selection:",
-                                                                e)
-                                                    return false
-                                                }
-                                            }
-                                            color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
-                                            implicitHeight: 50
-                                            RowLayout {
-                                                anchors {
-                                                    fill: parent
-                                                    leftMargin: 8
-                                                    rightMargin: 8
-                                                }
-                                                spacing: 8
-                                                Text {
-                                                    id: fileIcon
-                                                    text: {
-                                                        if (tableView.inBucketMode) {
-                                                            return "🪣"
-                                                        } else {
-                                                            return nameCell.isFolderType(
-                                                                        ) ? "📁" : "📄"
-                                                        }
-                                                    }
-                                                    font.pixelSize: 18
-                                                    color: {
-                                                        if (tableView.inBucketMode) {
-                                                            return "#1E88E5" // 桶图标颜色
-                                                        } else {
-                                                            return nameCell.isFolderType(
-                                                                        ) ? "#2980B9" : "#333333"
-                                                        }
-                                                    }
-                                                    Layout.preferredWidth: 24
-                                                }
-                                                Text {
-                                                    id: cellText
-                                                    Layout.fillWidth: true
-                                                    text: {
-                                                        let name = model.display
-                                                            || "未命名"
-                                                        return nameCell.isFolderType()
-                                                                && name.endsWith(
-                                                                    '/') ? name.substring(0, name.length - 1) : name
-                                                    }
-                                                    elide: Text.ElideRight
-                                                    visible: !nameCell.isEditing
-                                                    color: nameCell.isFolderType(
-                                                               ) ? "#2980B9" : "#333333"
-                                                    font.bold: nameCell.isFolderType()
-                                                    font.underline: nameCell.isFolderType()
-                                                }
-                                                // 添加模型变更监听
-                                                Component.onCompleted: {
 
-                                                }
-                                            }
-                                            // 处理点击事件
-                                            MouseArea {
-                                                id: mouseArea
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                cursorShape: Qt.PointingHandCursor
-                                                propagateComposedEvents: !nameCell.isEditing
-                                                property var root: rootItem
-                                                onClicked: function (mouse) {
-                                                    console.log("Clicked on row",
-                                                                row)
-                                                    try {
-                                                        // 如果当前是桶模型模式，点击处理不同
-                                                        if (tableView.inBucketMode) {
-                                                            if (mouse.button === Qt.LeftButton) {
-                                                                // 获取桶名
-                                                                const bucketName = model.display
-                                                                // 普通点击只是选择，不导航
-                                                                tableView.clearSelection()
-                                                            } else if (mouse.button
-                                                                       === Qt.RightButton) {
-                                                                bucketContextMenu.bucketName
-                                                                        = model.display
-                                                                bucketContextMenu.rowIndex = row
-                                                                bucketContextMenu.popup()
-                                                            }
-                                                        } else {
-                                                            const isFolder = nameCell.isFolderType()
-                                                            // 这里保存对应的行信息
-                                                            if (mouse.button === Qt.LeftButton) {
-                                                                // 左键点击
-                                                                if (mouse.modifiers
-                                                                        & Qt.ControlModifier) {
-                                                                    // 构建行信息
-                                                                    const rowData = {
-                                                                        "id": "obj" + row,
-                                                                        "name": display
-                                                                    }
-                                                                    // 从模型中获取 UserRole 数据
-                                                                    // 这里获取的 idx 是有效的 ???
-                                                                    var idx = tableView.model.index(
-                                                                                row, 0)
-                                                                    if (idx && idx.valid) {
-                                                                        console.log("有效的 idx")
-                                                                        var userData = tableView.model.data(idx, Qt.UserRole)
-                                                                        if (userData) {
-                                                                            // 添加下载所需的关键信息
-                                                                            rowData.key = userData.key || ""
-                                                                            rowData.size = userData.size || 0
-                                                                            rowData.isFolder = userData.isFolder || false
-                                                                            rowData.lastModified = userData.lastModified || ""
-                                                                        }
-                                                                    }
-                                                                    // 上面是无效的
-                                                                    // 如果没有获取到 key，使用 name 作为备选
-                                                                    if (!rowData.key) {
-                                                                        rowData.key = rowData.name
-                                                                    }
-                                                                    // 获取的 key 是完整路径
-                                                                    console.log("Ctrl+点击选择项目:",
-                                                                                rowData.name,
-                                                                                "key:",
-                                                                                rowData.key,
-                                                                                "size:",
-                                                                                rowData.size)
-                                                                    // 添加的数据
-                                                                    tableView.toggleSelection(
-                                                                                rowData)
-                                                                } else {
-                                                                    // 普通点击: 单选
-                                                                    tableView.clearSelection()
-                                                                }
-                                                            } else if (mouse.button
-                                                                       === Qt.RightButton) {
-                                                                // 右键菜单
-                                                                // 出现问题, 唯有 isFolder 属性
-                                                                const rowData = {
-                                                                    "id": "obj" + row,
-                                                                    "name": display
-                                                                            || ""
-                                                                }
-                                                                var idx = tableView.model.index(
-                                                                            row,
-                                                                            0)
-                                                                if (idx && idx.valid) {
-                                                                    console.log("有效的 idx")
-                                                                    var userData = tableView.model.data(idx, Qt.UserRole)
-                                                                    if (userData) {
-                                                                        // 添加下载所需的关键信息
-                                                                        rowData.key = userData.key
-                                                                                || ""
-                                                                        // rowData.size = userData.size
-                                                                        // || 0
-                                                                        // rowData.isFolder = userData.isFolder || false
-                                                                        // rowData.lastModified = userData.lastModified || ""
-                                                                    }
-                                                                }
-                                                                // 上面是无效的
-                                                                // 如果没有获取到 key，使用 name 作为备选
-                                                                if (!rowData.key) {
-                                                                    rowData.key = rowData.name
-                                                                }
+                                            mouse.accepted = true
+                                        }
 
-                                                                // 获取的 key 是完整路径
-                                                                // 完整的 key
-                                                                // console.log("Ctrl+点击选择项目:",
-                                                                //             rowData.name,
-                                                                //             "key:",
-                                                                //             rowData.key,
-                                                                //             "size:",
-                                                                //             rowData.size)
-                                                                if (!tableView.isItemSelected(
-                                                                            rowData.id)) {
-                                                                    // 当前不是选中的状态
-                                                                    tableView.clearSelection()
-                                                                    tableView.toggleSelection(
-                                                                                rowData)
-                                                                }
-                                                                // 准备上下文菜单数据
-                                                                contextMenu.rowData = rowData
-                                                                // 缺少属性
-                                                                contextMenu.rowIndex = row
-                                                                contextMenu.popup()
-                                                            }
-                                                        }
-                                                    } catch (e) {
-                                                        console.error(
-                                                                    "处理点击事件时出错:",
-                                                                    e)
-                                                    }
-                                                }
-                                                onDoubleClicked: function (mouse) {
+                                        onClicked: function (mouse) {
+                                            // 如果点击在按钮上，不处理
+                                            if (clickOnButton) {
+                                                mouse.accepted = false
+                                                return
+                                            }
+
+                                            console.log("点击行:", row,
+                                                        "列:", column)
+
+                                            try {
+                                                if (tableView.inBucketMode) {
+                                                    // 桶模式处理
                                                     if (mouse.button === Qt.LeftButton) {
-                                                        if (tableView.inBucketMode) {
-                                                            console.log("打开桶列表: ",
-                                                                        model.display)
-                                                            currentBucket = model.display
-                                                            handleOpenBucket(
-                                                                        currentBucket)
-                                                            return
-                                                        }
-                                                        const isFolder = nameCell.isFolderType()
-                                                        if (!isFolder) {
-                                                            console.log("双击的不是文件夹, 忽略操作")
-                                                            return
-                                                        }
-                                                        var rowData = {
-                                                            "id": "obj" + row,
-                                                            "name": display
-                                                                    || ""
-                                                        }
-                                                        if (!rowData) {
-                                                            console.error(
-                                                                        "无法获取行数据:",
-                                                                        row)
-                                                            return
-                                                        }
-                                                        var currentObjectModel = tableView.model
-                                                        var indexCol0 = currentObjectModel.index(
-                                                                    row, 0)
-                                                        if (indexCol0
-                                                                && indexCol0.valid) {
-                                                            // 名字
-                                                            var userRoleDataMap = currentObjectModel.data(
-                                                                        indexCol0,
-                                                                        Qt.UserRole)
-                                                            if (userRoleDataMap) {
-                                                                rowData.isFolder
-                                                                        = userRoleDataMap.isFolder
-                                                                rowData.key = userRoleDataMap.key
-                                                                rowData.size = userRoleDataMap.size
-                                                                rowData.date = userRoleDataMap.lastModified
-                                                            } else {
-                                                                console.warn(
-                                                                            "UserRole data missing for row:",
-                                                                            row,
-                                                                            "name:",
-                                                                            rowData.name)
-                                                                rowData.isFolder
-                                                                        = (rowData.name
-                                                                           && rowData.name.endsWith(
-                                                                               '/'))
-                                                                rowData.key = rowData.name
-
-                                                                var indexCol1 = currentObjectModel.index(
-                                                                            row,
-                                                                            1)
-                                                                if (indexCol1
-                                                                        && indexCol1.valid)
-                                                                    rowData.size = currentObjectModel.data(indexCol1, Qt.DisplayRole)
-
-                                                                var indexCol2 = currentObjectModel.index(
-                                                                            row,
-                                                                            2)
-                                                                if (indexCol2
-                                                                        && indexCol2.valid)
-                                                                    rowData.date = currentObjectModel.data(indexCol2, Qt.DisplayRole)
-                                                            }
-                                                        } else {
-                                                            console.error(
-                                                                        "双击处理：无法获取行 ",
-                                                                        row,
-                                                                        " 的有效索引。")
-                                                            return
-                                                        }
-                                                        if (rowData.isFolder !== isFolder) {
-                                                            console.warn("双击处理：rowData.isFolder (" + rowData.isFolder + ") 与 nameCell.isFolderType() (" + isFolder + ") 不一致。 UserRole/derived data is used for rowData.")
-                                                        }
-
-                                                        console.log("打开文件夹:",
-                                                                    rowData.name,
-                                                                    "(Key:",
-                                                                    rowData.key,
-                                                                    "IsFolder:",
-                                                                    rowData.isFolder,
-                                                                    ")")
-
-                                                        const keyToNavigate = rowData.key
-                                                                            || (rowData.name && rowData.name.endsWith('/') ? rowData.name : rowData.name + '/')
-
-                                                        ManagerGlobal.refreshObjects(
-                                                                    currentBucket,
-                                                                    keyToNavigate)
-
-                                                        console.log("记录数: ",
-                                                                    currentObjectModel.rowCount(
-                                                                        ))
-
-                                                        const displayName = rowData.name.endsWith('/') ? rowData.name.substring(0, rowData.name.length - 1) : rowData.name
-                                                        console.log("双击打开文件夹和路径:",
-                                                                    keyToNavigate,
-                                                                    displayName)
-                                                        breadcrumbNav.addPathItem(
-                                                                    keyToNavigate,
-                                                                    displayName)
-                                                        resetPaginationOnFolderChange()
+                                                        const bucketName = model.display
+                                                        tableView.clearSelection()
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        bucketContextMenu.bucketName = model.display
+                                                        bucketContextMenu.rowIndex = row
+                                                        bucketContextMenu.popup(
+                                                                    )
                                                     }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // 文件大小
-                                    DelegateChoice {
-                                        column: 1
-                                        delegate: Rectangle {
-                                            visible: tableView.isValidRow(row)
-                                            implicitHeight: 50
-                                            property bool isItemSelected: {
-                                                try {
-                                                    if (!tableView.selectedItems)
-                                                        return false
-                                                    return tableView.selectedItems.some(
-                                                                item => item.id === "obj" + row)
-                                                } catch (e) {
-                                                    console.error(
-                                                                "Error checking selection:",
-                                                                e)
-                                                    return false
-                                                }
-                                            }
-                                            color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
-
-                                            Text {
-                                                anchors {
-                                                    verticalCenter: parent.verticalCenter
-                                                }
-                                                text: display || ""
-                                                color: "#555555"
-                                                elide: Text.ElideRight
-                                                width: parent.width - 16
-                                            }
-                                            // 添加行选择效果
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                onClicked: {
-                                                    console.log("Current Row",
-                                                                row)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // 日期
-                                    DelegateChoice {
-                                        column: 2
-                                        delegate: Rectangle {
-                                            // 仅在行有效时显示
-                                            visible: tableView.isValidRow(row)
-                                            property bool isItemSelected: {
-                                                try {
-                                                    if (!tableView.selectedItems)
-                                                        return false
-                                                    return tableView.selectedItems.some(
-                                                                item => item.id === "obj" + row)
-                                                } catch (e) {
-                                                    console.error(
-                                                                "Error checking selection:",
-                                                                e)
-                                                    return false
-                                                }
-                                            }
-                                            color: isItemSelected ? "#E3F2FD" : "#FFFFFF"
-                                            implicitHeight: 50
-                                            Text {
-                                                anchors {
-                                                    verticalCenter: parent.verticalCenter
-                                                }
-                                                text: display || ""
-                                                color: "#555555"
-                                                elide: Text.ElideRight
-                                                width: parent.width - 16
-                                            }
-                                        }
-                                    }
-                                    DelegateChoice {
-                                        column: 3 // 操作列
-                                        delegate: Rectangle {
-                                            id: operationCell
-                                            visible: tableView.isValidRow(row)
-                                                     && !tableView.inBucketMode
-                                            implicitHeight: 50
-                                            color: {
-                                                try {
-                                                    if (!tableView.selectedItems)
-                                                        return "#FFFFFF"
-                                                    return tableView.selectedItems.some(
-                                                                item => item.id === "obj"
-                                                                + row) ? "#E3F2FD" : "#FFFFFF"
-                                                } catch (e) {
-                                                    return "#FFFFFF"
-                                                }
-                                            }
-                                            Button {
-                                                id: modernDownloadButton
-                                                anchors.centerIn: parent
-                                                width: 70
-                                                Layout.preferredHeight: 28 // 设定固定高度, 会影响表格的行高
-                                                visible: {
-                                                    // 之前第一次进入是无效的, 但是后面获取数据时，就会变得有效
-                                                    // 构造的时候缺少数据, 访问 undefined, 这是 qml 的什么机制 ???
-                                                    // 基本条件检查
-                                                    if (tableView.inBucketMode) {
-                                                        return false
-                                                    }
-
-                                                    if (!model) {
-                                                        return false
-                                                    }
-
-                                                    // 获取文件名
-                                                    var fileName = ""
-                                                    try {
-                                                        fileName = model.display
-                                                                || ""
-                                                    } catch (e) {
-                                                        return false
-                                                    }
-
-                                                    if (!fileName) {
-                                                        return false
-                                                    }
-
-                                                    // 简单判断：文件夹以 / 结尾
-                                                    return !fileName.endsWith(
-                                                                "/")
-                                                }
-                                                function updateVisibility() {
-                                                    try {
-                                                        if (tableView.inBucketMode) {
-                                                            visible = false
-                                                            return
-                                                        }
-
-                                                        // 检查模型数据是否有效
-                                                        if (!model
-                                                                || model.display === undefined) {
-                                                            visible = false
-                                                            return
-                                                        }
-
-                                                        var fileName = model.display
-                                                                || ""
-                                                        if (!fileName) {
-                                                            visible = false
-                                                            return
-                                                        }
-
-                                                        // 尝试从模型获取更详细的信息
-                                                        var idx = tableView.model.index(
-                                                                    row, 0)
-                                                        if (idx && idx.isValid) {
-                                                            var userData = tableView.model.data(
-                                                                        idx,
-                                                                        Qt.UserRole)
-                                                            if (userData
-                                                                    && userData.isFolder
-                                                                    !== undefined) {
-                                                                visible = !userData.isFolder
-                                                                return
-                                                            }
-                                                        }
-
-                                                        var isFolder = fileName.endsWith(
-                                                                    "/")
-                                                        visible = !isFolder
-                                                    } catch (e) {
-                                                        console.error(
-                                                                    "updateVisibility 出错:",
-                                                                    e)
-                                                        visible = false
-                                                    }
-                                                }
-
-                                                background: Rectangle {
-                                                    radius: 6
-                                                    color: parent.hovered ? "#EFF6FF" : "#F0F9FF"
-                                                    border.color: parent.hovered ? "#3B82F6" : "transparent"
-                                                    border.width: parent.hovered ? 1 : 0
-                                                    layer.enabled: true
-                                                    layer.effect: DropShadow {
-                                                        horizontalOffset: 0
-                                                        verticalOffset: 1
-                                                        radius: 3
-                                                        samples: 6
-                                                        color: "#20000000"
-                                                    }
-                                                }
-                                                contentItem: RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-
-                                                    Text {
-                                                        text: "⬇"
-                                                        font.pixelSize: 12
-                                                        color: "#1D4ED8"
-                                                        Layout.alignment: Qt.AlignVCenter
-                                                    }
-
-                                                    Text {
-                                                        text: "下载"
-                                                        font.pixelSize: 10
-                                                        font.weight: Font.Medium
-                                                        color: "#1D4ED8"
-                                                        Layout.alignment: Qt.AlignVCenter
-                                                        elide: Text.ElideRight
-                                                    }
-                                                }
-                                                onClicked: {
-                                                    try {
-                                                        if (!tableView.model) {
-                                                            console.error(
-                                                                        "表格模型无效")
-                                                            return
-                                                        }
-                                                        const totalRows = tableView.model.rowCount()
-                                                        // 4. 验证行是否在当前分页范围内（使用显示行索引）
-                                                        if (!tableView.isValidRow(
-                                                                    row)) {
-                                                            console.error(
-                                                                        "行不在当前分页范围内:",
-                                                                        row)
-                                                            return
-                                                        }
-                                                        var fileInfo = {
+                                                } else {
+                                                    // 多选
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        const rowData = {
                                                             "id": "obj" + row,
                                                             "name": model.display
-                                                                    || "未知文件"
+                                                                    || ""
                                                         }
-                                                        // 设置正确, 但是这里获取的是 行号, 而非 data 值
-                                                        // 永远是 2 ???
-                                                        // console.log("get the name: ",
-                                                        //             fileInfo.name)
-                                                        // 获取该行的有效数据
                                                         var idx = tableView.model.index(
                                                                     row, 0)
-                                                        if (idx || idx.isValid) {
-                                                            // fileInfo.name = tableView.model.data(
-                                                            //             idx,
-                                                            //             Qt.DisplayRole)
-                                                            // // 读取的名字是正确的
-                                                            // console.log("主动读取 display role: ",
-                                                            //             fileInfo.name)
-
-                                                            // }
+                                                        if (idx && idx.valid) {
                                                             var userData = tableView.model.data(
                                                                         idx,
                                                                         Qt.UserRole)
                                                             if (userData) {
-                                                                fileInfo.key = userData.key
+                                                                rowData.key = userData.key
                                                                         || ""
-                                                                fileInfo.size = userData.size
+                                                                rowData.size = userData.size
                                                                         || 0
-                                                                fileInfo.isFolder
-                                                                        = userData.isFolder
+                                                                rowData.isFolder = userData.isFolder
                                                                         || false
-                                                                fileInfo.lastModified
+                                                                rowData.lastModified
                                                                         = userData.lastModified
                                                                         || ""
-                                                            } else {
-                                                                console.warn(
-                                                                            "UserRole 数据无效，使用默认值:",
-                                                                            fileInfo)
                                                             }
                                                         }
-                                                        // name 是名字, key 是路径加+名字
-                                                        console.log("点击下载按钮选择项目:",
-                                                                    fileInfo.name,
-                                                                    "key:",
-                                                                    fileInfo.key,
-                                                                    "size:",
-                                                                    fileInfo.size)
-                                                        rootItem.addDownloadTask(
-                                                                    fileInfo)
-                                                        // downloadPanel.open()
-                                                    } catch (e) {
-                                                        console.error(
-                                                                    "下载处理错误:",
-                                                                    e)
+
+                                                        if (!rowData.key) {
+                                                            rowData.key = rowData.name
+                                                        }
+
+                                                        if (mouse.modifiers & Qt.ControlModifier) {
+                                                            // Ctrl+点击：多选/取消选择
+                                                            if (rowData.isFolder) {
+                                                                                        console.log("文件夹不支持多选，忽略 Ctrl+点击:", rowData.name)
+                                                                return
+                                                            }
+                                                            console.log("Ctrl+点击，切换选择状态:",
+                                                                        rowData.name)
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        } else {
+                                                            // 普通点击：清除其他选择，选择当前项
+                                                            console.log("普通点击，单选:",
+                                                                        rowData.name)
+                                                            tableView.clearSelection()
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        }
+
+                                                        // 更新下载按钮状态
+                                                        downloadTitleButton.enabled
+                                                                = tableView.selectedItems.length > 0
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        // 右键菜单处理
+                                                        const rowData = {
+                                                            "id": "obj" + row,
+                                                            "name": model.display
+                                                                    || ""
+                                                        }
+
+                                                        var idx = tableView.model.index(
+                                                                    row, 0)
+                                                        if (idx && idx.valid) {
+                                                            var userData = tableView.model.data(
+                                                                        idx,
+                                                                        Qt.UserRole)
+                                                            if (userData) {
+                                                                rowData.key = userData.key
+                                                                        || ""
+                                                                rowData.size = userData.size
+                                                                        || 0
+                                                                rowData.isFolder = userData.isFolder
+                                                                        || false
+                                                            }
+                                                        }
+
+                                                        if (!rowData.key) {
+                                                            rowData.key = rowData.name
+                                                        }
+
+                                                        // 如果右键的项目没有被选中，则选中它
+                                                        if (!tableView.isItemSelected(
+                                                                    rowData.id)) {
+                                                            tableView.clearSelection()
+                                                            tableView.toggleSelection(
+                                                                        rowData)
+                                                        }
+
+                                                        contextMenu.rowData = rowData
+                                                        contextMenu.rowIndex = row
+                                                        contextMenu.popup()
                                                     }
                                                 }
-                                                TtToolTip {
-                                                    text: qsTr("打开文件位置")
-                                                    visible: parent.hovered
-                                                    delay: 500
-                                                    arrowPosition: "auto"
-                                                }
-                                                scale: hovered ? 1.05 : 1.0
-                                                Behavior on scale {
-                                                    NumberAnimation {
-                                                        duration: 100
+                                            } catch (e) {
+                                                console.error("处理点击事件时出错:", e)
+                                            }
+                                        }
+
+                                        onDoubleClicked: function (mouse) {
+                                            if (clickOnButton) {
+                                                mouse.accepted = false
+                                                return
+                                            }
+
+                                            if (mouse.button !== Qt.LeftButton)
+                                                return
+
+                                            if (tableView.inBucketMode) {
+                                                console.log("打开桶:",
+                                                            model.display)
+                                                currentBucket = model.display
+                                                handleOpenBucket(currentBucket)
+                                            } else {
+                                                handleFolderDoubleClick(row)
+                                            }
+                                        }
+                                    }
+
+                                    Item {
+                                        anchors.fill: parent
+                                        anchors.margins: 8
+
+                                        // 第0列：名称列
+                                        RowLayout {
+                                            visible: column === 0
+                                            anchors.fill: parent
+                                            spacing: 8
+
+                                            // 图标
+                                            Text {
+                                                id: fileIcon
+                                                // 图标获取有问题
+                                                text: {
+                                                    if (tableView.inBucketMode) {
+                                                        return "🪣"
+                                                    } else {
+                                                        var isFolder = false
+                                                        // 调用函数, 才能在 model 数据到来后更新
+                                                        // return cellContainer.isFolderType(
+                                                        //             ) ? "📁" : "📄"
+                                                        return cellContainer.isFolder ? "📁" : "📄"
+                                                        // return getCurrentFolderState(
+                                                        //             ) ? "📁" : "📄"
                                                     }
+                                                }
+                                                font.pixelSize: 18
+                                                color: {
+                                                    if (tableView.inBucketMode) {
+                                                        return "#1E88E5"
+                                                    } else {
+                                                        var isFolder = text === "📁"
+                                                        return isFolder ? "#2980B9" : "#333333"
+                                                    }
+                                                }
+                                                Layout.preferredWidth: 24
+                                            }
+
+                                            // 文本名字没有问题
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: {
+                                                    var name = model.display
+                                                            || "未命名"
+                                                    if (fileIcon.text === "📁"
+                                                            && name.endsWith(
+                                                                '/')) {
+                                                        return name.substring(
+                                                                    0,
+                                                                    name.length - 1)
+                                                    }
+                                                    return name
+                                                }
+                                                elide: Text.ElideRight
+                                                color: fileIcon.text
+                                                       === "📁" ? "#2980B9" : "#333333"
+                                                font.bold: fileIcon.text === "📁"
+                                                font.underline: fileIcon.text === "📁"
+                                                font.pixelSize: 13
+                                            }
+                                        }
+
+                                        // 第1列：大小/区域列
+                                        Text {
+                                            visible: column === 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: display || ""
+                                            color: "#555555"
+                                            elide: Text.ElideRight
+                                            width: parent.width - 16
+                                            font.pixelSize: 13
+                                        }
+
+                                        // 第2列：时间列
+                                        Text {
+                                            visible: column === 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: display || ""
+                                            color: "#555555"
+                                            elide: Text.ElideRight
+                                            width: parent.width - 16
+                                            font.pixelSize: 13
+                                        }
+
+                                        // 第3列：操作列
+                                        Button {
+                                            id: downloadButton
+                                            // visible: {
+                                            //     if (column !== 3
+                                            //             || tableView.inBucketMode) {
+                                            //         return false
+                                            //     }
+                                            //     // 一开始全部都是空, 后面才会运行一次
+                                            //     console.log("🔍 下载按钮可见性判断:",
+                                            //                 JSON.stringify({
+                                            //                                    "row": row,
+                                            //                                    "column": column,
+                                            //                                    "inBucketMode": tableView.inBucketMode,
+                                            //                                    "isFolder": isFolder,
+                                            //                                    "fileName": model.display || ""
+                                            //                                    // "shouldShow": shouldShow
+                                            //                                }))
+
+                                            //     if (isFolder) {
+                                            //         return false
+                                            //     } else {
+                                            //         return true
+                                            //     }
+                                            //     // 为什么最后 shouldShow 是 true ? name 空的
+                                            //     // return shouldShow
+                                            // }
+                                            visible: {
+                                                if (column !== 3
+                                                        || tableView.inBucketMode) {
+                                                    return false
+                                                }
+
+                                                // 🔥 直接调用函数，不依赖缓存属性
+                                                var isCurrentlyFolder = cellContainer.isFolderType()
+                                                var fileName = model.display
+                                                        || ""
+
+                                                // 🔥 添加文件名有效性检查
+                                                if (!fileName
+                                                        || fileName === "") {
+                                                    return false
+                                                }
+
+                                                // console.log("🔍 下载按钮可见性判断:",
+                                                //             JSON.stringify({
+                                                //                                "row": row,
+                                                //                                "column": column,
+                                                //                                "inBucketMode": tableView.inBucketMode,
+                                                //                                "isFolder": isCurrentlyFolder,
+                                                //                                "fileName": fileName,
+                                                //                                "shouldShow": !isCurrentlyFolder
+                                                //                            }))
+
+                                                return !isCurrentlyFolder
+                                            }
+                                            // anchors.centerIn: parent
+                                            anchors.fill: parent
+                                            //  anchors.margins: 4
+                                            // width: 70
+                                            // height: 40
+                                            z: 10
+                                            //                                         background: Rectangle {
+                                            //     anchors.fill: parent
+                                            //     radius: 6
+
+                                            //     // 🔥 简化：使用纯色背景
+                                            //     color: {
+                                            //         if (parent.pressed) {
+                                            //             return "#1976D2"  // 按下时的深蓝色
+                                            //         } else if (parent.hovered) {
+                                            //             return "#2196F3"  // 悬停时的蓝色
+                                            //         } else {
+                                            //             return "#E3F2FD"  // 默认的浅蓝色
+                                            //         }
+                                            //     }
+
+                                            //     border.color: parent.hovered ? "#1976D2" : "#90CAF9"
+                                            //     border.width: 1
+
+                                            //     // 🔥 添加动画效果
+                                            //     Behavior on color {
+                                            //         ColorAnimation {
+                                            //             duration: 150
+                                            //             easing.type: Easing.OutQuad
+                                            //         }
+                                            //     }
+                                            // }
+                                            background: Rectangle {
+                                                anchors.fill: parent
+                                                radius: 8
+
+                                                // 🔥 Material 颜色方案
+                                                color: {
+                                                    if (parent.pressed) {
+                                                        return "#1E88E5"
+                                                    } else if (parent.hovered) {
+                                                        return "#42A5F5"
+                                                    } else {
+                                                        return "#E3F2FD"
+                                                    }
+                                                }
+
+                                                // 🔥 Material 阴影
+                                                layer.enabled: true
+                                                layer.effect: DropShadow {
+                                                    horizontalOffset: 0
+                                                    verticalOffset: parent.parent.hovered ? 4 : 2
+                                                    radius: parent.parent.hovered ? 8 : 4
+                                                    samples: 16
+                                                    color: "#40000000"
+
+                                                    Behavior on verticalOffset {
+                                                        NumberAnimation {
+                                                            duration: 200
+                                                        }
+                                                    }
+                                                    Behavior on radius {
+                                                        NumberAnimation {
+                                                            duration: 200
+                                                        }
+                                                    }
+                                                }
+
+                                                // 🔥 添加涟漪效果
+                                                Rectangle {
+                                                    id: ripple
+                                                    anchors.centerIn: parent
+                                                    width: 0
+                                                    height: 0
+                                                    radius: width / 2
+                                                    color: "#FFFFFF"
+                                                    opacity: 0
+
+                                                    PropertyAnimation {
+                                                        // id: rippleAnimation
+                                                        target: ripple
+                                                        properties: "width,height"
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+
+                                                    PropertyAnimation {
+                                                        // id: rippleOpacity
+                                                        target: ripple
+                                                        property: "opacity"
+                                                        from: 0.3
+                                                        to: 0
+                                                        duration: 300
+                                                    }
+                                                }
+
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: 200
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                            }
+
+                                            // contentItem: RowLayout {
+                                            //     anchors.centerIn: parent
+                                            //     spacing: 6
+
+                                            //     Text {
+                                            //         text: "⬇"
+                                            //         font.pixelSize: 14
+                                            //         color: "#1565C0" // 🔥 使用更深的蓝色
+                                            //     }
+
+                                            //     Text {
+                                            //         text: "下载"
+                                            //         font.pixelSize: 12
+                                            //         color: "#1565C0" // 🔥 使用更深的蓝色
+                                            //     }
+                                            // }
+                                                contentItem: Item {
+        anchors.fill: parent
+        
+        // 🔥 使用 Row 替代 RowLayout，更容易控制居中
+        Row {
+            anchors.centerIn: parent  // 🔥 关键修复：确保整个 Row 在父容器中居中
+            spacing: 6
+            
+            Text {
+                text: "⬇"
+                font.pixelSize: 16
+                color: "#1565C0"
+                anchors.verticalCenter: parent.verticalCenter  // 🔥 确保文本垂直居中
+            }
+
+            Text {
+                text: "下载"
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: "#1565C0"
+                anchors.verticalCenter: parent.verticalCenter  // 🔥 确保文本垂直居中
+            }
+        }
+    }
+
+                                            onClicked: {
+                                                console.log("🔥 下载按钮被点击!")
+                                                if (cellContainer.isFolder) {
+                                                    console.warn("⚠️ 尝试下载文件夹，操作被阻止")
+                                                    return
+                                                }
+                                                try {
+                                                    if (!tableView.model) {
+                                                        console.error("表格模型无效")
+                                                        return
+                                                    }
+
+                                                    var fileInfo = {
+                                                        "id": "obj" + row,
+                                                        "name": model.display
+                                                                || "未知文件"
+                                                    }
+
+                                                    var idx = tableView.model.index(
+                                                                row, 0)
+                                                    if (idx && idx.valid) {
+                                                        var userData = tableView.model.data(
+                                                                    idx,
+                                                                    Qt.UserRole)
+                                                        if (userData) {
+                                                            fileInfo.key = userData.key
+                                                                    || ""
+                                                            fileInfo.size = userData.size
+                                                                    || 0
+                                                            fileInfo.isFolder = userData.isFolder
+                                                                    || false
+                                                        }
+                                                    }
+
+                                                    if (!fileInfo.key) {
+                                                        fileInfo.key = fileInfo.name
+                                                    }
+
+                                                    console.log("下载文件:",
+                                                                fileInfo)
+                                                    rootItem.addDownloadTask(
+                                                                fileInfo)
+                                                } catch (e) {
+                                                    console.error("下载处理错误:", e)
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                // 选择处理函数
+
                                 function toggleSelection(item) {
                                     const index = selectedItems.findIndex(
                                                     i => i.id === item.id)
@@ -3526,13 +4375,42 @@ Item {
                                     selectedItemsChanged()
 
                                     // 更新下载按钮状态
-                                    downloadButton.enabled = selectedItems.length > 0
+                                    downloadTitleButton.enabled = selectedItems.length > 0
+                                }
+                                // function toggleSelection(item) {
+                                //     console.log("切换选择状态:", item.name,
+                                //                 "ID:", item.id)
+
+                                //     const index = selectedItems.findIndex(
+                                //                     i => i.id === item.id)
+                                //     if (index >= 0) {
+                                //         // 已选中，取消选择
+                                //         selectedItems.splice(index, 1)
+                                //         console.log("取消选择:", item.name)
+                                //     } else {
+                                //         // 未选中，添加选择
+                                //         selectedItems.push(item)
+                                //         console.log("添加选择:", item.name)
+                                //     }
+
+                                //     // 🔥 手动触发更新
+                                //     selectedItemsChanged()
+
+                                //     // 🔥 更新下载按钮状态
+                                //     downloadTitleButton.enabled = selectedItems.length > 0
+
+                                //     console.log("当前选择项目数:",
+                                //                 selectedItems.length)
+                                // }
+                                function getDownloadableItems() {
+                                    return selectedItems.filter(
+                                                item => !item.isFolder)
                                 }
 
                                 function clearSelection() {
                                     selectedItems = []
                                     selectedItemsChanged()
-                                    downloadButton.enabled = false
+                                    downloadTitleButton.enabled = false
                                 }
 
                                 function isItemSelected(id) {
@@ -3547,25 +4425,23 @@ Item {
                                     id: contextMenu
                                     property var rowData: null
                                     property int rowIndex: -1
-                                    MenuItem {
-                                        text: qsTr("编辑")
-                                        onTriggered: {
-                                            // 使用全局属性控制编辑状态，避免 DOM 访问
-                                            tableView.editingRow = contextMenu.rowIndex
-                                            tableView.editingColumn = 1 // 名称列
+                                    // MenuItem {
+                                    //     text: qsTr("编辑")
+                                    //     onTriggered: {
+                                    //         // 使用全局属性控制编辑状态，避免 DOM 访问
+                                    //         tableView.editingRow = contextMenu.rowIndex
+                                    //         tableView.editingColumn = 1 // 名称列
 
-                                            // 通知视图更新
-                                            tableView.forceLayout()
+                                    //         // 通知视图更新
+                                    //         tableView.forceLayout()
 
-                                            console.log("开始编辑行:",
-                                                        contextMenu.rowIndex)
-                                        }
-                                    }
+                                    //         console.log("开始编辑行:",
+                                    //                     contextMenu.rowIndex)
+                                    //     }
+                                    // }
                                     MenuItem {
                                         text: qsTr("删除对象")
                                         onTriggered: {
-                                            // 返回的是 对象名, 缺少路径
-                                            // BUG 缺少路径, 桶名正确
                                             console.log("删除项目:",
                                                         contextMenu.rowData ? contextMenu.rowData.name : "未知",
                                                         "桶名", currentBucket,
@@ -3630,68 +4506,173 @@ Item {
                                     //                 // refreshData()
                                     //             })
                                 }
-                                // 添加响应窗口尺寸变化的逻辑
                             }
                         }
                         // 在表格或列表视图下方
+                        // TtPaginationNav {
+                        //     id: pagination
+                        //     Layout.fillWidth: true
+                        //     Layout.alignment: Qt.AlignBottom
+                        //     // 选择某个桶的时候，计算总条数, 切换桶的时候对应的总条数也要改变
+                        //     totalRecords: {
+                        //         if (tableView.model
+                        //                 && typeof tableView.model.rowCount === "function") {
+                        //             // 打印大只有一次, 后面变化了, 不会输出 log, 但会底部改变 totalRecord ??? 为什么
+                        //             console.log("get total ",
+                        //                         tableView.model.rowCount())
+                        //             return tableView.model.rowCount()
+                        //         }
+                        //         console.log("return 0")
+                        //         return 0
+                        //     }
+                        //     rowsPerPage: 20
+                        //     currentPage: rootItem.currentPage
+
+                        //     onPageRequested: function (page) {
+                        //         // console.log("切换到页码:", page)
+                        //         // 更新当前页码
+                        //         rootItem.currentPage = page
+                        //         // 重新计算分页范围
+                        //         rootItem.pageStartRow = (page - 1) * currentPerPage
+                        //         rootItem.pageEndRow = Math.min(
+                        //                     rootItem.pageStartRow + currentPerPage,
+                        //                     currentRecordCount) - 1
+                        //         Qt.callLater(function () {
+                        //             tableView.contentY = 0
+                        //             tableView.forceLayout()
+                        //             tableView.contentY = 0
+                        //         })
+                        //     }
+                        //     // 处理每页行数变化
+                        //     onRowsPerPageRequested: function (rows) {
+                        //         console.log("每页显示行数改为:", rows)
+                        //         // 更新每页行数
+                        //         rootItem.currentPerPage = rows
+
+                        //         // 如果当前页超出新的页数范围，调整到第一页
+                        //         const totalPages = Math.ceil(
+                        //                              currentRecordCount / rows)
+                        //         if (currentPage > totalPages) {
+                        //             currentPage = 1
+                        //         }
+
+                        //         // 重新计算分页范围
+                        //         rootItem.pageStartRow = (currentPage - 1) * rows
+                        //         rootItem.pageEndRow = Math.min(
+                        //                     rootItem.pageStartRow + rows,
+                        //                     currentRecordCount) - 1
+
+                        //         // 强制刷新表格
+                        //         tableView.forceLayout()
+
+                        //         // 滚动到顶部
+                        //         tableView.contentY = 0
+                        //     }
+                        // }
                         TtPaginationNav {
                             id: pagination
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignBottom
-                            // 选择某个桶的时候，计算总条数, 切换桶的时候对应的总条数也要改变
+
+                            // 🔥 修复：使用计算属性确保数据正确
                             totalRecords: {
-                                if (tableView.model
-                                        && typeof tableView.model.rowCount === "function") {
-                                    // 打印大只有一次, 后面变化了, 不会输出 log, 但会底部改变 totalRecord ??? 为什么
-                                    console.log("get total ",
-                                                tableView.model.rowCount())
-                                    return tableView.model.rowCount()
+                                if (!tableView.model) {
+                                    return 0
                                 }
-                                console.log("return 0")
+
+                                try {
+                                    if (typeof tableView.model.rowCount === "function") {
+                                        var count = tableView.model.rowCount()
+                                        console.log("📊 分页组件获取总记录数:",
+                                                    count, "当前模式:",
+                                                    tableView.inBucketMode ? "桶模式" : "对象模式")
+                                        return count
+                                    }
+                                } catch (e) {
+                                    console.error("❌ 获取总记录数失败:", e)
+                                }
                                 return 0
                             }
-                            rowsPerPage: 20
+
+                            rowsPerPage: rootItem.currentPerPage || 20
+
+                            // 🔥 关键修复：确保双向绑定
                             currentPage: rootItem.currentPage
 
+                            // 🔥 修复页面切换处理
                             onPageRequested: function (page) {
-                                // console.log("切换到页码:", page)
-                                // 更新当前页码
-                                rootItem.currentPage = page
-                                // 重新计算分页范围
-                                rootItem.pageStartRow = (page - 1) * currentPerPage
-                                rootItem.pageEndRow = Math.min(
-                                            rootItem.pageStartRow + currentPerPage,
-                                            currentRecordCount) - 1
-                                Qt.callLater(function () {
-                                    tableView.contentY = 0
-                                    tableView.forceLayout()
-                                    tableView.contentY = 0
-                                })
-                            }
-                            // 处理每页行数变化
-                            onRowsPerPageRequested: function (rows) {
-                                console.log("每页显示行数改为:", rows)
-                                // 更新每页行数
-                                rootItem.currentPerPage = rows
+                                console.log("🔄 分页组件请求切换到页码:", page, "当前页:",
+                                            rootItem.currentPage)
 
-                                // 如果当前页超出新的页数范围，调整到第一页
-                                const totalPages = Math.ceil(
-                                                     currentRecordCount / rows)
-                                if (currentPage > totalPages) {
-                                    currentPage = 1
+                                // 🔥 验证页码有效性
+                                var maxPage = Math.ceil(
+                                            totalRecords / rowsPerPage)
+                                if (page < 1 || page > maxPage) {
+                                    console.warn("⚠️ 无效的页码:", page,
+                                                 "最大页数:", maxPage)
+                                    return
                                 }
 
-                                // 重新计算分页范围
-                                rootItem.pageStartRow = (currentPage - 1) * rows
-                                rootItem.pageEndRow = Math.min(
-                                            rootItem.pageStartRow + rows,
-                                            currentRecordCount) - 1
+                                // 🔥 立即更新当前页码
+                                rootItem.currentPage = page
 
-                                // 强制刷新表格
-                                tableView.forceLayout()
+                                // 🔥 重新计算分页范围
+                                var newStartRow = (page - 1) * rowsPerPage
+                                var newEndRow = Math.min(
+                                            newStartRow + rowsPerPage,
+                                            totalRecords) - 1
 
-                                // 滚动到顶部
-                                tableView.contentY = 0
+                                console.log("📄 计算新的分页范围:", newStartRow, "到",
+                                            newEndRow)
+
+                                rootItem.pageStartRow = newStartRow
+                                rootItem.pageEndRow = newEndRow
+
+                                // 🔥 立即刷新表格
+                                Qt.callLater(function () {
+                                    console.log("🔄 强制刷新表格布局")
+                                    tableView.contentY = 0
+                                    tableView.forceLayout()
+
+                                    // 🔥 确保分页组件状态同步
+                                    pagination.currentPage = page
+                                })
+                            }
+
+                            // 🔥 修复每页行数变化处理
+                            onRowsPerPageRequested: function (rows) {
+                                console.log("📝 每页显示行数改为:", rows, "当前页:",
+                                            rootItem.currentPage)
+
+                                // 🔥 更新每页行数
+                                rootItem.currentPerPage = rows
+
+                                // 🔥 重新计算最大页数
+                                var maxPage = Math.ceil(totalRecords / rows)
+                                console.log("📊 新的最大页数:", maxPage)
+
+                                // 🔥 如果当前页超出范围，调整到第一页
+                                if (rootItem.currentPage > maxPage) {
+                                    console.log("⚠️ 当前页超出范围，重置到第1页")
+                                    rootItem.currentPage = 1
+                                }
+
+                                // 🔥 重新计算分页范围
+                                var newStartRow = (rootItem.currentPage - 1) * rows
+                                var newEndRow = Math.min(newStartRow + rows,
+                                                         totalRecords) - 1
+
+                                rootItem.pageStartRow = newStartRow
+                                rootItem.pageEndRow = newEndRow
+
+                                // 🔥 强制刷新表格
+                                Qt.callLater(function () {
+                                    tableView.forceLayout()
+                                    tableView.contentY = 0
+
+                                    // 🔥 确保分页组件状态同步
+                                    pagination.currentPage = rootItem.currentPage
+                                })
                             }
                         }
                     }

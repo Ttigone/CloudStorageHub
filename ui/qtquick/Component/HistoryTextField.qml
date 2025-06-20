@@ -18,7 +18,6 @@ TextField {
     property string completionIconText: "📁"
     property int maxCompletionItems: 8
 
-    // 新增美化属性
     property bool showClearButton: true
     property bool showHistoryButton: true
     property color accentColor: "#3B82F6"
@@ -238,6 +237,8 @@ TextField {
             height: 28
 
             anchors.verticalCenter: parent.verticalCenter
+            activeFocusOnTab: false
+            focusPolicy: Qt.NoFocus
 
             background: Rectangle {
                 anchors.centerIn: parent
@@ -314,6 +315,8 @@ TextField {
                                                    || enableCompletion)
             width: 28 // 稍大一些，因为它是主要功能按钮
             height: 28
+            activeFocusOnTab: false
+            focusPolicy: Qt.NoFocus
 
             background: Rectangle {
                 radius: 14 // 保持完美圆形 (width/2)
@@ -544,26 +547,26 @@ TextField {
     //     }
     // }
     onTextChanged: {
-    console.log("HistoryTextField 文本变化:", text, "当前焦点:", activeFocus)
-    
-    if (enableCompletion || historyModel.length > 0) {
-        // 🔥 不使用 Qt.callLater，直接处理，避免焦点丢失
-        var hasHistory = historyModel.length > 0
-        var hasCompletions = enableCompletion && getFilteredCompletions(text).length > 0
+        console.log("HistoryTextField 文本变化:", text, "当前焦点:", activeFocus)
 
-        if (hasHistory || hasCompletions) {
-            if (!historyPopup.visible && text.length > 0 && activeFocus) {
-                // 🔥 关键：只在有焦点时打开弹窗
-                console.log("文本变化触发弹窗显示，当前焦点:", activeFocus)
-                historyPopup.open()
+        if (enableCompletion || historyModel.length > 0) {
+            // 🔥 不使用 Qt.callLater，直接处理，避免焦点丢失
+            var hasHistory = historyModel.length > 0
+            var hasCompletions = enableCompletion && getFilteredCompletions(
+                        text).length > 0
+
+            if (hasHistory || hasCompletions) {
+                if (!historyPopup.visible && text.length > 0 && activeFocus) {
+                    // 🔥 关键：只在有焦点时打开弹窗
+                    console.log("文本变化触发弹窗显示，当前焦点:", activeFocus)
+                    historyPopup.open()
+                }
+            } else if (historyPopup.visible) {
+                console.log("无匹配项，隐藏弹窗")
+                historyPopup.close()
             }
-        } else if (historyPopup.visible) {
-            console.log("无匹配项，隐藏弹窗")
-            historyPopup.close()
         }
     }
-}
-
 
     // 修改 Popup 部分 - 缩小尺寸版本
     // Popup {
@@ -1158,428 +1161,429 @@ TextField {
     //         }
     //     }
     // }
-//     Popup {
-//     id: historyPopup
-//     y: parent.height + 2
-//     width: parent.width
-//     height: Math.min(listView.contentHeight + 12, 200)
-//     padding: 6
-    
-//     // 🔥 关键：不让弹窗获取焦点
-//     focus: false
-//     modal: false
-    
-//     // 🔥 修复：确保弹窗不会影响输入框焦点
-//     onOpened: {
-//         console.log("弹窗已打开，保持输入框焦点")
-//         // 不要调用 listView.forceActiveFocus()，这会夺取焦点
-//         // 确保输入框保持焦点
-//         Qt.callLater(function() {
-//             if (!control.activeFocus) {
-//                 control.forceActiveFocus()
-//             }
-//         })
-//     }
+    //     Popup {
+    //     id: historyPopup
+    //     y: parent.height + 2
+    //     width: parent.width
+    //     height: Math.min(listView.contentHeight + 12, 200)
+    //     padding: 6
 
-//     onClosed: {
-//         console.log("弹窗已关闭，确保输入框焦点")
-//         // 🔥 弹窗关闭时确保输入框重新获得焦点
-//         Qt.callLater(function() {
-//             if (!control.activeFocus) {
-//                 control.forceActiveFocus()
-//             }
-//         })
-//     }
+    //     // 🔥 关键：不让弹窗获取焦点
+    //     focus: false
+    //     modal: false
 
-//     background: Rectangle {
-//         color: "#FFFFFF"
-//         border.color: "#D1D5DB"
-//         border.width: 1
-//         radius: 4
+    //     // 🔥 修复：确保弹窗不会影响输入框焦点
+    //     onOpened: {
+    //         console.log("弹窗已打开，保持输入框焦点")
+    //         // 不要调用 listView.forceActiveFocus()，这会夺取焦点
+    //         // 确保输入框保持焦点
+    //         Qt.callLater(function() {
+    //             if (!control.activeFocus) {
+    //                 control.forceActiveFocus()
+    //             }
+    //         })
+    //     }
 
-//         layer.enabled: true
-//         layer.effect: DropShadow {
-//             horizontalOffset: 0
-//             verticalOffset: 2
-//             radius: 8
-//             samples: 17
-//             color: "#40000000"
-//         }
-//     }
+    //     onClosed: {
+    //         console.log("弹窗已关闭，确保输入框焦点")
+    //         // 🔥 弹窗关闭时确保输入框重新获得焦点
+    //         Qt.callLater(function() {
+    //             if (!control.activeFocus) {
+    //                 control.forceActiveFocus()
+    //             }
+    //         })
+    //     }
 
-//     ListView {
-//         id: listView
-//         anchors.fill: parent
-//         clip: true
-        
-//         // 🔥 关键：不让 ListView 获取焦点
-//         focus: false
-//         activeFocusOnTab: false
-        
-//         model: {
-//             var combined = []
-//             var filteredCompletions = getFilteredCompletions(control.text)
+    //     background: Rectangle {
+    //         color: "#FFFFFF"
+    //         border.color: "#D1D5DB"
+    //         border.width: 1
+    //         radius: 4
 
-//             for (var i = 0; i < filteredCompletions.length; i++) {
-//                 combined.push({
-//                     "text": filteredCompletions[i],
-//                     "isCompletion": true,
-//                     "icon": completionIconText
-//                 })
-//             }
+    //         layer.enabled: true
+    //         layer.effect: DropShadow {
+    //             horizontalOffset: 0
+    //             verticalOffset: 2
+    //             radius: 8
+    //             samples: 17
+    //             color: "#40000000"
+    //         }
+    //     }
 
-//             for (var j = 0; j < historyModel.length; j++) {
-//                 combined.push({
-//                     "text": historyModel[j],
-//                     "isCompletion": false,
-//                     "icon": historyIconText
-//                 })
-//             }
+    //     ListView {
+    //         id: listView
+    //         anchors.fill: parent
+    //         clip: true
 
-//             return combined
-//         }
+    //         // 🔥 关键：不让 ListView 获取焦点
+    //         focus: false
+    //         activeFocusOnTab: false
 
-//         delegate: Rectangle {
-//             width: listView.width
-//             height: 32
-//             color: mouseArea.containsMouse ? "#F3F4F6" : "transparent"
+    //         model: {
+    //             var combined = []
+    //             var filteredCompletions = getFilteredCompletions(control.text)
 
-//             // MouseArea {
-//             //     id: mouseArea
-//             //     anchors.fill: parent
-//             //     hoverEnabled: true
-                
-//             //     // 🔥 不让 MouseArea 获取焦点
-//             //     focus: false
-//             //     activeFocusOnTab: false
+    //             for (var i = 0; i < filteredCompletions.length; i++) {
+    //                 combined.push({
+    //                     "text": filteredCompletions[i],
+    //                     "isCompletion": true,
+    //                     "icon": completionIconText
+    //                 })
+    //             }
 
-//             //     onClicked: function (mouse) {
-//             //         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
+    //             for (var j = 0; j < historyModel.length; j++) {
+    //                 combined.push({
+    //                     "text": historyModel[j],
+    //                     "isCompletion": false,
+    //                     "icon": historyIconText
+    //                 })
+    //             }
 
-//             //         // 🔥 先保存当前焦点状态
-//             //         var hadFocus = control.activeFocus
-                    
-//             //         // 关闭弹窗
-//             //         historyPopup.close()
+    //             return combined
+    //         }
 
-//             //         // 设置文本
-//             //         control.text = modelData.text
-                    
-//             //         // 🔥 确保输入框保持焦点
-//             //         if (!control.activeFocus) {
-//             //             control.forceActiveFocus()
-//             //         }
+    //         delegate: Rectangle {
+    //             width: listView.width
+    //             height: 32
+    //             color: mouseArea.containsMouse ? "#F3F4F6" : "transparent"
 
-//             //         // 延迟发出信号
-//             //         Qt.callLater(function () {
-//             //             if (modelData.isCompletion) {
-//             //                 control.completionItemSelected(modelData.text)
-//             //             } else {
-//             //                 control.historyItemSelected(modelData.text)
-//             //             }
-//             //         })
+    //             // MouseArea {
+    //             //     id: mouseArea
+    //             //     anchors.fill: parent
+    //             //     hoverEnabled: true
 
-//             //         mouse.accepted = true
-//             //     }
-//             // }
-//             MouseArea {
-//     id: mouseArea
-//     anchors.fill: parent
-//     hoverEnabled: true
-//     propagateComposedEvents: false  // 🔥 确保不传播事件
-    
-//     // 🔥 不让 MouseArea 获取焦点
-//     focus: false
-//     activeFocusOnTab: false
+    //             //     // 🔥 不让 MouseArea 获取焦点
+    //             //     focus: false
+    //             //     activeFocusOnTab: false
 
-//     onClicked: function (mouse) {
-//         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
+    //             //     onClicked: function (mouse) {
+    //             //         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
 
-//         // 🔥 立即阻止事件传播
-//         mouse.accepted = true
-        
-//         // 🔥 立即关闭弹窗，不使用延迟
-//         console.log("立即关闭弹窗")
-//         historyPopup.visible = false  // 直接设置 visible 而不是调用 close()
-        
-//         // 设置文本
-//         control.text = modelData.text
-        
-//         // 🔥 立即恢复焦点
-//         control.forceActiveFocus()
-        
-//         // 🔥 延迟发出信号，确保界面更新完成
-//         Qt.callLater(function () {
-//             console.log("发出选择信号:", modelData.text)
-//             if (modelData.isCompletion) {
-//                 control.completionItemSelected(modelData.text)
-//             } else {
-//                 control.historyItemSelected(modelData.text)
-//             }
-//         })
-//     }
-    
-//     // 🔥 添加按下处理，确保立即响应
-//     onPressed: function(mouse) {
-//         console.log("项目被按下:", modelData.text)
-//         mouse.accepted = true
-//     }
-// }
+    //             //         // 🔥 先保存当前焦点状态
+    //             //         var hadFocus = control.activeFocus
 
-//             Row {
-//                 anchors {
-//                     left: parent.left
-//                     leftMargin: 8
-//                     verticalCenter: parent.verticalCenter
-//                 }
-//                 spacing: 8
+    //             //         // 关闭弹窗
+    //             //         historyPopup.close()
 
-//                 Text {
-//                     text: modelData.icon
-//                     font.pixelSize: 12
-//                     color: "#6B7280"
-//                     anchors.verticalCenter: parent.verticalCenter
-//                 }
+    //             //         // 设置文本
+    //             //         control.text = modelData.text
 
-//                 Text {
-//                     text: modelData.text
-//                     font.pixelSize: 13
-//                     color: "#374151"
-//                     anchors.verticalCenter: parent.verticalCenter
-//                 }
-//             }
-//         }
-//     }
-// }
-Popup {
-    id: historyPopup
-    y: parent.height + 2
-    width: parent.width
-    height: Math.min(listView.contentHeight + 12, 200)
-    padding: 6
-    
-    // 🔥 关键：不让弹窗获取焦点
-    focus: false
-    modal: false
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
-    
-    // 🔥 修复：简化弹窗打开处理
-    onOpened: {
-        console.log("弹窗已打开")
-    }
+    //             //         // 🔥 确保输入框保持焦点
+    //             //         if (!control.activeFocus) {
+    //             //             control.forceActiveFocus()
+    //             //         }
 
-    onClosed: {
-        console.log("弹窗已关闭")
-        // 🔥 确保输入框重新获得焦点
-        if (!control.activeFocus) {
-            control.forceActiveFocus()
-        }
-    }
-    
-    // 🔥 添加可见性变化监听
-    onVisibleChanged: {
-        console.log("弹窗可见性变化:", visible)
-        if (!visible) {
-            // 弹窗隐藏时确保焦点回到输入框
-            Qt.callLater(function() {
-                if (!control.activeFocus) {
-                    control.forceActiveFocus()
-                }
-            })
-        }
-    }
+    //             //         // 延迟发出信号
+    //             //         Qt.callLater(function () {
+    //             //             if (modelData.isCompletion) {
+    //             //                 control.completionItemSelected(modelData.text)
+    //             //             } else {
+    //             //                 control.historyItemSelected(modelData.text)
+    //             //             }
+    //             //         })
 
-    background: Rectangle {
-        color: "#FFFFFF"
-        border.color: "#D1D5DB"
-        border.width: 1
-        radius: 4
+    //             //         mouse.accepted = true
+    //             //     }
+    //             // }
+    //             MouseArea {
+    //     id: mouseArea
+    //     anchors.fill: parent
+    //     hoverEnabled: true
+    //     propagateComposedEvents: false  // 🔥 确保不传播事件
 
-        layer.enabled: true
-        layer.effect: DropShadow {
-            horizontalOffset: 0
-            verticalOffset: 2
-            radius: 8
-            samples: 17
-            color: "#40000000"
-        }
-    }
+    //     // 🔥 不让 MouseArea 获取焦点
+    //     focus: false
+    //     activeFocusOnTab: false
 
-    ListView {
-        id: listView
-        anchors.fill: parent
-        clip: true
-        
-        // 🔥 关键：不让 ListView 获取焦点
+    //     onClicked: function (mouse) {
+    //         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
+
+    //         // 🔥 立即阻止事件传播
+    //         mouse.accepted = true
+
+    //         // 🔥 立即关闭弹窗，不使用延迟
+    //         console.log("立即关闭弹窗")
+    //         historyPopup.visible = false  // 直接设置 visible 而不是调用 close()
+
+    //         // 设置文本
+    //         control.text = modelData.text
+
+    //         // 🔥 立即恢复焦点
+    //         control.forceActiveFocus()
+
+    //         // 🔥 延迟发出信号，确保界面更新完成
+    //         Qt.callLater(function () {
+    //             console.log("发出选择信号:", modelData.text)
+    //             if (modelData.isCompletion) {
+    //                 control.completionItemSelected(modelData.text)
+    //             } else {
+    //                 control.historyItemSelected(modelData.text)
+    //             }
+    //         })
+    //     }
+
+    //     // 🔥 添加按下处理，确保立即响应
+    //     onPressed: function(mouse) {
+    //         console.log("项目被按下:", modelData.text)
+    //         mouse.accepted = true
+    //     }
+    // }
+
+    //             Row {
+    //                 anchors {
+    //                     left: parent.left
+    //                     leftMargin: 8
+    //                     verticalCenter: parent.verticalCenter
+    //                 }
+    //                 spacing: 8
+
+    //                 Text {
+    //                     text: modelData.icon
+    //                     font.pixelSize: 12
+    //                     color: "#6B7280"
+    //                     anchors.verticalCenter: parent.verticalCenter
+    //                 }
+
+    //                 Text {
+    //                     text: modelData.text
+    //                     font.pixelSize: 13
+    //                     color: "#374151"
+    //                     anchors.verticalCenter: parent.verticalCenter
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    Popup {
+        id: historyPopup
+        y: parent.height + 2
+        width: parent.width
+        height: Math.min(listView.contentHeight + 12, 200)
+        padding: 6
+
+        // 🔥 关键：不让弹窗获取焦点
         focus: false
-        activeFocusOnTab: false
-        
-        model: {
-            var combined = []
-            var filteredCompletions = getFilteredCompletions(control.text)
+        modal: false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-            for (var i = 0; i < filteredCompletions.length; i++) {
-                combined.push({
-                    "text": filteredCompletions[i],
-                    "isCompletion": true,
-                    "icon": completionIconText
+        // 🔥 修复：简化弹窗打开处理
+        onOpened: {
+            console.log("弹窗已打开")
+        }
+
+        onClosed: {
+            console.log("弹窗已关闭")
+            // 🔥 确保输入框重新获得焦点
+            if (!control.activeFocus) {
+                control.forceActiveFocus()
+            }
+        }
+
+        // 🔥 添加可见性变化监听
+        onVisibleChanged: {
+            console.log("弹窗可见性变化:", visible)
+            if (!visible) {
+                // 弹窗隐藏时确保焦点回到输入框
+                Qt.callLater(function () {
+                    if (!control.activeFocus) {
+                        control.forceActiveFocus()
+                    }
                 })
             }
-
-            for (var j = 0; j < historyModel.length; j++) {
-                combined.push({
-                    "text": historyModel[j],
-                    "isCompletion": false,
-                    "icon": historyIconText
-                })
-            }
-
-            return combined
         }
 
-        delegate: Rectangle {
-            width: listView.width
-            height: 32
-            color: mouseArea.containsMouse ? "#F3F4F6" : "transparent"
+        background: Rectangle {
+            color: "#FFFFFF"
+            border.color: "#D1D5DB"
+            border.width: 1
+            radius: 4
 
-            // 🔥 修复后的 MouseArea - 关键部分
-            // MouseArea {
-            //     id: mouseArea
-            //     anchors.fill: parent
-            //     hoverEnabled: true
-            //     propagateComposedEvents: false
-            //     preventStealing: true  // 🔥 防止手势被窃取
-                
-            //     focus: false
-            //     activeFocusOnTab: false
-
-            //     onClicked: function (mouse) {
-            //         console.log("=== 点击处理开始 ===")
-            //         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
-            //         console.log("弹窗当前状态:", historyPopup.visible)
-
-            //         // 🔥 立即阻止事件传播
-            //         mouse.accepted = true
-                    
-            //         // 🔥 立即强制关闭弹窗
-            //         if (historyPopup.visible) {
-            //             console.log("强制关闭弹窗")
-            //             historyPopup.visible = false
-            //             historyPopup.close()  // 双重保险
-            //         }
-                    
-            //         // 设置文本
-            //         var selectedText = modelData.text
-            //         console.log("设置文本:", selectedText)
-            //         control.text = selectedText
-                    
-            //         // 🔥 立即恢复焦点
-            //         control.forceActiveFocus()
-                    
-            //         // 🔥 最小延迟发出信号
-            //         Qt.callLater(function () {
-            //             console.log("发出选择信号:", selectedText)
-            //             if (modelData.isCompletion) {
-            //                 control.completionItemSelected(selectedText)
-            //             } else {
-            //                 control.historyItemSelected(selectedText)
-            //             }
-            //             console.log("=== 点击处理完成 ===")
-            //         })
-            //     }
-                
-            //     onPressed: function(mouse) {
-            //         console.log("项目被按下:", modelData.text)
-            //         mouse.accepted = true
-            //     }
-                
-            //     onReleased: function(mouse) {
-            //         console.log("项目被释放:", modelData.text)
-            //         mouse.accepted = true
-            //     }
-            // }
-MouseArea {
-    id: mouseArea
-    anchors.fill: parent
-    hoverEnabled: true
-    propagateComposedEvents: false
-    preventStealing: true
-    
-    focus: false
-    activeFocusOnTab: false
-
-    onClicked: function (mouse) {
-        console.log("=== 点击历史项处理开始 ===")
-        console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
-        console.log("弹窗当前状态:", historyPopup.visible)
-        console.log("输入框焦点状态:", control.activeFocus)
-
-        // 🔥 立即阻止事件传播
-        mouse.accepted = true
-        
-        // 🔥 立即强制关闭弹窗
-        if (historyPopup.visible) {
-            console.log("强制关闭弹窗")
-            historyPopup.visible = false
-            historyPopup.close()
-        }
-        
-        // 设置文本
-        var selectedText = modelData.text
-        console.log("设置文本:", selectedText)
-        control.text = selectedText
-        
-        // 🔥 修复：不能直接设置 activeFocus，使用 focus 属性
-        control.focus = false
-        
-        // 🔥 延迟发出信号，不自动恢复焦点
-        Qt.callLater(function () {
-            console.log("发出选择信号:", selectedText)
-            if (modelData.isCompletion) {
-                control.completionItemSelected(selectedText)
-            } else {
-                control.historyItemSelected(selectedText)
-            }
-            
-            console.log("=== 点击历史项处理完成 ===")
-        })
-    }
-    
-    onPressed: function(mouse) {
-        console.log("项目被按下:", modelData.text)
-        mouse.accepted = true
-    }
-    
-    onReleased: function(mouse) {
-        console.log("项目被释放:", modelData.text)
-        mouse.accepted = true
-    }
-}
-            Row {
-                anchors {
-                    left: parent.left
-                    leftMargin: 8
-                    verticalCenter: parent.verticalCenter
-                }
-                spacing: 8
-
-                Text {
-                    text: modelData.icon
-                    font.pixelSize: 12
-                    color: "#6B7280"
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                    text: modelData.text
-                    font.pixelSize: 13
-                    color: "#374151"
-                    anchors.verticalCenter: parent.verticalCenter
-                }
+            layer.enabled: true
+            layer.effect: DropShadow {
+                horizontalOffset: 0
+                verticalOffset: 2
+                radius: 8
+                samples: 17
+                color: "#40000000"
             }
         }
+
+        ListView {
+            id: listView
+            anchors.fill: parent
+            clip: true
+
+            // 🔥 关键：不让 ListView 获取焦点
+            focus: false
+            activeFocusOnTab: false
+
+            model: {
+                var combined = []
+                var filteredCompletions = getFilteredCompletions(control.text)
+
+                for (var i = 0; i < filteredCompletions.length; i++) {
+                    combined.push({
+                                      "text": filteredCompletions[i],
+                                      "isCompletion": true,
+                                      "icon": completionIconText
+                                  })
+                }
+
+                for (var j = 0; j < historyModel.length; j++) {
+                    combined.push({
+                                      "text": historyModel[j],
+                                      "isCompletion": false,
+                                      "icon": historyIconText
+                                  })
+                }
+
+                return combined
+            }
+
+            delegate: Rectangle {
+                width: listView.width
+                height: 32
+                color: mouseArea.containsMouse ? "#F3F4F6" : "transparent"
+
+                // 🔥 修复后的 MouseArea - 关键部分
+                // MouseArea {
+                //     id: mouseArea
+                //     anchors.fill: parent
+                //     hoverEnabled: true
+                //     propagateComposedEvents: false
+                //     preventStealing: true  // 🔥 防止手势被窃取
+
+                //     focus: false
+                //     activeFocusOnTab: false
+
+                //     onClicked: function (mouse) {
+                //         console.log("=== 点击处理开始 ===")
+                //         console.log("点击了项目:", modelData.text, "是否为补全:", modelData.isCompletion)
+                //         console.log("弹窗当前状态:", historyPopup.visible)
+
+                //         // 🔥 立即阻止事件传播
+                //         mouse.accepted = true
+
+                //         // 🔥 立即强制关闭弹窗
+                //         if (historyPopup.visible) {
+                //             console.log("强制关闭弹窗")
+                //             historyPopup.visible = false
+                //             historyPopup.close()  // 双重保险
+                //         }
+
+                //         // 设置文本
+                //         var selectedText = modelData.text
+                //         console.log("设置文本:", selectedText)
+                //         control.text = selectedText
+
+                //         // 🔥 立即恢复焦点
+                //         control.forceActiveFocus()
+
+                //         // 🔥 最小延迟发出信号
+                //         Qt.callLater(function () {
+                //             console.log("发出选择信号:", selectedText)
+                //             if (modelData.isCompletion) {
+                //                 control.completionItemSelected(selectedText)
+                //             } else {
+                //                 control.historyItemSelected(selectedText)
+                //             }
+                //             console.log("=== 点击处理完成 ===")
+                //         })
+                //     }
+
+                //     onPressed: function(mouse) {
+                //         console.log("项目被按下:", modelData.text)
+                //         mouse.accepted = true
+                //     }
+
+                //     onReleased: function(mouse) {
+                //         console.log("项目被释放:", modelData.text)
+                //         mouse.accepted = true
+                //     }
+                // }
+                MouseArea {
+                    id: mouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    propagateComposedEvents: false
+                    preventStealing: true
+
+                    focus: false
+                    activeFocusOnTab: false
+
+                    onClicked: function (mouse) {
+                        console.log("=== 点击历史项处理开始 ===")
+                        console.log("点击了项目:", modelData.text, "是否为补全:",
+                                    modelData.isCompletion)
+                        console.log("弹窗当前状态:", historyPopup.visible)
+                        console.log("输入框焦点状态:", control.activeFocus)
+
+                        // 🔥 立即阻止事件传播
+                        mouse.accepted = true
+
+                        // 🔥 立即强制关闭弹窗
+                        if (historyPopup.visible) {
+                            console.log("强制关闭弹窗")
+                            historyPopup.visible = false
+                            historyPopup.close()
+                        }
+
+                        // 设置文本
+                        var selectedText = modelData.text
+                        console.log("设置文本:", selectedText)
+                        control.text = selectedText
+
+                        // 🔥 修复：不能直接设置 activeFocus，使用 focus 属性
+                        control.focus = false
+
+                        // 🔥 延迟发出信号，不自动恢复焦点
+                        Qt.callLater(function () {
+                            console.log("发出选择信号:", selectedText)
+                            if (modelData.isCompletion) {
+                                control.completionItemSelected(selectedText)
+                            } else {
+                                control.historyItemSelected(selectedText)
+                            }
+
+                            console.log("=== 点击历史项处理完成 ===")
+                        })
+                    }
+
+                    onPressed: function (mouse) {
+                        console.log("项目被按下:", modelData.text)
+                        mouse.accepted = true
+                    }
+
+                    onReleased: function (mouse) {
+                        console.log("项目被释放:", modelData.text)
+                        mouse.accepted = true
+                    }
+                }
+                Row {
+                    anchors {
+                        left: parent.left
+                        leftMargin: 8
+                        verticalCenter: parent.verticalCenter
+                    }
+                    spacing: 8
+
+                    Text {
+                        text: modelData.icon
+                        font.pixelSize: 12
+                        color: "#6B7280"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: modelData.text
+                        font.pixelSize: 13
+                        color: "#374151"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+        }
     }
-}
 
     // 确认清除历史记录对话框
     Dialog {

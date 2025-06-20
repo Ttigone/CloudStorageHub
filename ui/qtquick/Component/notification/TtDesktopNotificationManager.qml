@@ -271,8 +271,8 @@ Item {
             newX = parent.width - notificationWidth - marginRight
         }
 
-        console.log("计算X位置:", newX, "通知宽度:", notificationWidth, "父容器宽度:",
-                    parent.width)
+        // console.log("计算X位置:", newX, "通知宽度:", notificationWidth, "父容器宽度:",
+        //             parent.width)
         return newX
     }
 
@@ -297,7 +297,6 @@ Item {
         console.log("  - 基础Y位置:", baseY)
         console.log("  - 当前数组长度:", activeNotifications.length)
 
-        // 🔥 只累加前面的通知高度
         for (var i = 0; i < index; i++) {
             if (i < activeNotifications.length && activeNotifications[i]) {
                 var prevNotification = activeNotifications[i]
