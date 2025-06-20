@@ -28,7 +28,7 @@ void GateWay::send(int api, const QJsonValue &params) {
       // 这里捕获异常失败
       if (e.code() == EC_211000) {
         // 内部处理的 e.msg
-        qDebug() << "发了送登录失败信号" << e.msg();
+        qDebug() << "发了送登录失败信号" << QString(e.msg().toUtf8());
         // 这里发出的信号值, 捕获时
         // emit ManGLOBAL->mSignal->loginFailed(e.msg());
         emit ManGLOBAL->mSignal->loginFailed(
@@ -101,9 +101,6 @@ void GateWay::apiLogin(const QJsonValue &value) {
   QString secretKey = value["secretKey"].toString();
   qDebug() << "网关登录执行操作";
   ManGLOBAL->mCloud->login(secretId.toStdString(), secretKey.toStdString());
-  // 这些信息都输出到哪里了???
-  // 登录成功后, 执行下面的操作
-  qDebug() << "网关登录执行操作完成";
   mWarning(STR("Cloud Object Storage secretID: %1 logined.").arg(secretId));
 }
 

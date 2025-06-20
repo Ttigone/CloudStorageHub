@@ -56,7 +56,8 @@ void BaseException::generateErrorCodeHFile(const QString &csvPath,
 QString BaseException::msg() const {
   static ErrorMap m_map =
       BaseException::parseErrorCode(GLOBAL::PATH::ERROR_CODE_PATH);
-  QString m = STR("错误（%1）： %2").arg(m_code, m_map[m_code].toLocal8Bit());
+  // QString m = STR("错误（%1）： %2").arg(m_code, m_map[m_code].toLocal8Bit());
+  QString m = STR("错误（%1）： %2").arg(m_code, m_map[m_code].toUtf8());
   if (m_msg != "") {
     m += STR("， 详情： %1").arg(m_msg);
   }

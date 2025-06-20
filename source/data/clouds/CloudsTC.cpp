@@ -81,10 +81,7 @@ QList<TtBucket> CloudsTC::buckets() {
   qcloud_cos::CosResult result = cos.GetService(req, &resp);
   if (!result.IsSucc()) {
     // 用户登录用户密码有误
-    // qDebug() << "登录失败";
-    // 抛出了异常
     throwError(EC_211000, result);
-    // qDebug() << "登录失败2";
   }
   QList<TtBucket> res;
   // 这里的Bucket是cos API中的类
